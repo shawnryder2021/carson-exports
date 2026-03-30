@@ -886,6 +886,42 @@ app.post('/api/webhook/sms-inbound', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/sms-lead-status/:phone
+ * Get current status of SMS lead conversation
+ * Used for real-time polling in admin dashboard
+ *
+ * Response: { success: true, lead: { phone, name, currentState, status, smsHistory, appointmentData } }
+ */
+app.get('/api/sms-lead-status/:phone', (req, res) => {
+  try {
+    const phone = req.params.phone.startsWith('+') ? req.params.phone : '+1' + req.params.phone.replace(/\D/g, '');
+    const smsLead = getSMSLeadByPhone(phone);
+
+    if (!smsLead) {
+      return res.json({ success: false, error: 'SMS lead not found' });
+    }
+
+    res.json({
+      success: true,
+      lead: {
+        id: smsLead.id,
+        phone: smsLead.phone,
+        name: smsLead.name,
+        currentState: smsLead.currentState,
+        status: smsLead.status,
+        smsHistory: smsLead.smsHistory,
+        appointmentData: smsLead.appointmentData,
+        createdAt: smsLead.createdAt,
+        updatedAt: smsLead.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('SMS Lead Status Error:', error);
+    res.status(500).json({ error: 'Failed to get SMS lead status' });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚗 Carson Exports AI Backend running on http://localhost:${PORT}`);
