@@ -16,6 +16,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const twilio = require('twilio');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,12 +29,30 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
+// Twilio Configuration (optional - SMS features disabled if not provided)
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+
 // Validation
 if (!OPENAI_API_KEY) {
   console.error('ERROR: OPENAI_API_KEY not found in environment variables');
   console.error('Please create a .env file with: OPENAI_API_KEY=your_key_here');
   process.exit(1);
 }
+
+// Initialize Twilio client if credentials provided
+let twilioClient = null;
+if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER) {
+  twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+  console.log('✅ Twilio configured. SMS features enabled.');
+} else {
+  console.warn('⚠️  Twilio not configured. SMS features disabled.');
+  console.warn('   Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in .env to enable SMS');
+}
+
+// SMS Leads Storage (in-memory, could be moved to database for production)
+let smsLeads = [];
 
 /**
  * Generate system prompt dynamically based on dealership settings and chat state
@@ -196,6 +215,103 @@ Remember: This is a natural conversation between a helpful AI and a customer. Re
 }
 
 /**
+ * Generate system prompt for SMS conversations
+ * SMS-optimized: shorter messages, natural language, mobile-friendly
+ * @param {Object} dealershipSettings - Dealership configuration
+ * @param {string} smsState - Current SMS state (ah_menu, ah_inventory, ah_appt_*, etc.)
+ * @param {Object} leadData - SMS lead data for context
+ * @returns {string} - SMS-optimized system prompt
+ */
+function generateSMSSystemPrompt(dealershipSettings = {}, smsState = 'ah_menu', leadData = {}) {
+  const settings = {
+    dealershipName: dealershipSettings.dealershipName || 'Carson Exports',
+    phone: dealershipSettings.phone || '1-833-706-3093',
+    address: dealershipSettings.address || '550 Windmill Road, Dartmouth, NS',
+    hours: dealershipSettings.hours || 'Mon-Sat 9AM-8PM',
+    brands: dealershipSettings.brands || 'Toyota, Honda, Nissan, Hyundai, Ford, Audi, BMW'
+  };
+
+  let stateGuidance = '';
+
+  switch(smsState) {
+    case 'ah_menu':
+      stateGuidance = `CURRENT STATE: Initial SMS greeting (after-hours)
+- Customer just received initial SMS
+- Keep VERY short: under 160 characters (single SMS)
+- Offer 2-3 clear options
+- Example: "Hi ${leadData.name}! 🚗 Thanks for your interest. What can we help with? Reply: 1) Browse vehicles, 2) Book appointment, 3) Ask a question"`;
+      break;
+
+    case 'ah_inventory':
+      stateGuidance = `CURRENT STATE: Customer browsing vehicles via SMS
+- Keep responses SHORT: fit in 1-2 SMS messages (320 chars max)
+- Ask about preferences: vehicle type, budget, features
+- Share 1-2 vehicles with brief details
+- Example: "Great! We have a Honda CR-V, $28,900, 85k km - interested? Or want more options?"`;
+      break;
+
+    case 'ah_appt_name':
+    case 'ah_appt_phone':
+    case 'ah_appt_email':
+    case 'ah_appt_date':
+    case 'ah_appt_time':
+      stateGuidance = `CURRENT STATE: Collecting appointment field (${smsState})
+- Extract the required information naturally
+- Confirm the value in next message
+- Move to next field
+- Keep responses conversational and short`;
+      break;
+
+    default:
+      stateGuidance = `Current SMS state: ${smsState}`;
+  }
+
+  return `You are an AI assistant for ${settings.dealershipName}, a pre-owned vehicle dealership. You're having an SMS conversation with a customer after-hours.
+
+DEALERSHIP INFO:
+- Name: ${settings.dealershipName}
+- Hours: ${settings.hours}
+- Phone: ${settings.phone}
+- Location: ${settings.address}
+- Brands: ${settings.brands}
+
+CUSTOMER INFO:
+- Name: ${leadData.name || 'Customer'}
+- Phone: ${leadData.phone || 'Not yet collected'}
+- Interest: ${leadData.vehicleInterest || 'General inquiry'}
+
+SMS CONVERSATION RULES:
+- Keep messages SHORT (under 160 characters when possible)
+- Use simple language, NO jargon
+- Be friendly and helpful
+- Ask one question at a time
+- Use emojis sparingly (🚗 👍 ✅ are OK)
+
+STATE-AWARE BEHAVIOR:
+${stateGuidance}
+
+Remember: You're texting, not emailing. Keep it brief, natural, and friendly.`;
+}
+
+/**
+ * Get SMS lead by phone number
+ */
+function getSMSLeadByPhone(phone) {
+  return smsLeads.find(lead => lead.phone === phone);
+}
+
+/**
+ * Update SMS lead state and appointment data
+ */
+function updateSMSLead(phone, updates) {
+  const lead = getSMSLeadByPhone(phone);
+  if (lead) {
+    Object.assign(lead, updates, { updatedAt: new Date().toISOString() });
+  }
+  return lead;
+}
+
+/**
  * POST /api/chat
  *
  * Request body:
@@ -304,8 +420,179 @@ app.post('/api/chat', async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    twilio: twilioClient ? 'enabled' : 'disabled'
   });
+});
+
+/**
+ * POST /api/webhook/adf
+ * Receives ADF-formatted lead from Make/Zapier email service
+ * Initiates SMS conversation with customer
+ *
+ * Request body: { customer_name, customer_phone, customer_email, vehicle_interest, department }
+ * Response: { success: true, leadId, message, customerPhone }
+ */
+app.post('/api/webhook/adf', async (req, res) => {
+  try {
+    if (!twilioClient) {
+      return res.status(503).json({ error: 'Twilio not configured. SMS features disabled.' });
+    }
+
+    const adfParser = require('./adf-parser');
+
+    // Parse incoming ADF data
+    const smsLead = adfParser.parseADFPayload(req.body);
+
+    if (!smsLead.phone) {
+      return res.status(400).json({ error: 'Invalid phone number in ADF payload' });
+    }
+
+    // Store SMS lead
+    smsLeads.push(smsLead);
+
+    // Send initial SMS greeting
+    try {
+      await twilioClient.messages.create({
+        body: `Hi ${smsLead.name}! 👋 Thanks for your interest in ${smsLead.vehicleInterest || 'our vehicles'}. What can we help with? 1) Browse vehicles 2) Book appointment 3) Ask a question`,
+        from: TWILIO_PHONE_NUMBER,
+        to: smsLead.phone
+      });
+    } catch (twilioError) {
+      console.error('Twilio SMS Error:', twilioError.message);
+      return res.status(500).json({ error: 'Failed to send SMS: ' + twilioError.message });
+    }
+
+    console.log(`✅ SMS conversation initiated with ${smsLead.phone} (${smsLead.name})`);
+
+    res.json({
+      success: true,
+      leadId: smsLead.id,
+      message: 'SMS conversation initiated',
+      customerPhone: smsLead.phone
+    });
+
+  } catch (error) {
+    console.error('ADF Webhook Error:', error);
+    res.status(500).json({ error: 'Failed to process ADF lead: ' + error.message });
+  }
+});
+
+/**
+ * POST /api/sms-chat
+ * Processes incoming SMS message and generates AI response
+ *
+ * Request body: { phone, message }
+ * Response: { success: true, response, leadState }
+ */
+app.post('/api/sms-chat', async (req, res) => {
+  try {
+    if (!twilioClient) {
+      return res.status(503).json({ error: 'Twilio not configured' });
+    }
+
+    const { phone, message } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'Missing phone or message' });
+    }
+
+    // Find SMS lead by phone
+    const smsLead = getSMSLeadByPhone(phone);
+
+    if (!smsLead) {
+      return res.status(404).json({ error: 'SMS lead not found for phone: ' + phone });
+    }
+
+    // Generate system prompt with SMS context
+    const systemPrompt = generateSMSSystemPrompt({}, smsLead.currentState, smsLead);
+
+    // Call OpenAI API for response
+    const response = await axios.post(OPENAI_API_URL, {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...smsLead.smsHistory,
+        { role: 'user', content: message }
+      ],
+      temperature: 0.7,
+      max_tokens: 300,
+      top_p: 0.9
+    }, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const aiResponse = response.data.choices[0].message.content;
+
+    // Log messages in transcript
+    smsLead.smsHistory.push(
+      { role: 'user', content: message },
+      { role: 'assistant', content: aiResponse }
+    );
+    smsLead.updatedAt = new Date().toISOString();
+
+    // Send response via Twilio
+    try {
+      await twilioClient.messages.create({
+        body: aiResponse,
+        from: TWILIO_PHONE_NUMBER,
+        to: phone
+      });
+    } catch (twilioError) {
+      console.error('Twilio SMS send error:', twilioError.message);
+    }
+
+    console.log(`📱 SMS response sent to ${phone}`);
+
+    res.json({
+      success: true,
+      response: aiResponse,
+      leadState: smsLead.currentState
+    });
+
+  } catch (error) {
+    console.error('SMS Chat Error:', error);
+    res.status(500).json({ error: 'Failed to process SMS message: ' + error.message });
+  }
+});
+
+/**
+ * POST /api/webhook/sms-inbound
+ * Receives SMS messages from Twilio webhook
+ *
+ * Request body: { From, Body, MessageSid, ... }
+ * Response: { statusCode, body }
+ */
+app.post('/api/webhook/sms-inbound', async (req, res) => {
+  try {
+    const { From, Body } = req.body;
+
+    if (!From || !Body) {
+      return res.status(400).json({ error: 'Invalid Twilio webhook payload' });
+    }
+
+    console.log(`📨 Inbound SMS from ${From}: ${Body.substring(0, 50)}...`);
+
+    // Process SMS through chat endpoint
+    try {
+      await axios.post(`http://localhost:${PORT}/api/sms-chat`, {
+        phone: From,
+        message: Body
+      });
+    } catch (chatError) {
+      console.error('SMS chat processing error:', chatError.message);
+    }
+
+    // Return 200 OK to Twilio immediately
+    res.json({ statusCode: 200, body: 'Message processed' });
+
+  } catch (error) {
+    console.error('SMS Inbound Webhook Error:', error);
+    res.json({ statusCode: 200, body: 'Error logged' }); // Still return 200 to Twilio
+  }
 });
 
 // Start server
