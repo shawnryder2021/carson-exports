@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Integration Example - Carson Exports</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+    h1 { color: #333; }
+    .example { background: #f9f9f9; padding: 15px; margin: 15px 0; border-left: 4px solid #1e6fff; border-radius: 4px; }
+    .code { background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 4px; overflow-x: auto; font-family: 'Courier New'; font-size: 12px; }
+    .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #ff9800; }
+    .success { background: #d4edda; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #28a745; }
+    button { background: #1e6fff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #1455cc; }
+    #output { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-top: 15px; white-space: pre-wrap; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🚗 Carson Exports - AI Integration Example</h1>
+
+  <div class="warning">
+    <strong>⚠️ Important:</strong> Make sure your backend server is running!<br>
+    <code>cd "Carson Exports Chat" && npm start</code>
+  </div>
+
+  <!-- Example 1: Basic Usage -->
+  <div class="example">
+    <h2>Example 1: Basic AI Chat</h2>
+    <p>Send a message to the AI and get a response:</p>
+    <input type="text" id="userMessage" placeholder="Ask about vehicles..." value="What SUVs do you have?">
+    <button onclick="testBasicChat()">Send Message</button>
+    <div id="output"></div>
+  </div>
+
+  <!-- Example 2: With Conversation History -->
+  <div class="example">
+    <h2>Example 2: Conversation with History</h2>
+    <p>Multiple messages with conversation context:</p>
+    <button onclick="testConversation()">Run Conversation Example</button>
+    <div id="output2"></div>
+  </div>
+
+  <!-- Example 3: Check Backend Status -->
+  <div class="example">
+    <h2>Example 3: Backend Health Check</h2>
+    <button onclick="testBackendHealth()">Check Backend Status</button>
+    <div id="output3"></div>
+  </div>
+
+  <!-- Example 4: Change Backend URL -->
+  <div class="example">
+    <h2>Example 4: Production Deployment</h2>
+    <p>When deployed to production, update the backend URL:</p>
+    <input type="text" id="newBackendUrl" placeholder="https://your-domain.com/api/chat" value="https://your-domain.com/api/chat">
+    <button onclick="changeBackendUrl()">Update Backend URL</button>
+    <div id="output4"></div>
+  </div>
+
+</div>
+
+<!-- Include the AI integration module -->
+<script src="ai-integration.js"></script>
+
+<script>
+  /**
+   * Example 1: Basic Chat
+   */
+  async function testBasicChat() {
+    const output = document.getElementById('output');
+    const userMessage = document.getElementById('userMessage').value;
+
+    output.textContent = '⏳ Generating response...\n';
+
+    try {
+      const response = await aiChat.generate(userMessage, false); // false = no history
+      output.textContent = `User: ${userMessage}\n\nAssistant: ${response}`;
+    } catch (error) {
+      output.textContent = `Error: ${error.message}`;
+    }
+  }
+
+  /**
+   * Example 2: Conversation with History
+   */
+  async function testConversation() {
+    const output = document.getElementById('output2');
+    output.textContent = '⏳ Running conversation example...\n';
+
+    try {
+      // Clear previous history
+      aiChat.clearHistory();
+
+      // Message 1
+      output.textContent += '🟦 User: What vehicles do you have?\n';
+      let response = await aiChat.generate('What vehicles do you have?', true);
+      output.textContent += `🟩 Assistant: ${response}\n\n`;
+
+      // Message 2 (context-aware)
+      output.textContent += '🟦 User: Do you have any SUVs under $30k?\n';
+      response = await aiChat.generate('Do you have any SUVs under $30k?', true);
+      output.textContent += `🟩 Assistant: ${response}\n\n`;
+
+      // Show conversation history
+      const history = aiChat.getHistory();
+      output.textContent += `📋 Conversation History (${history.length} messages):\n`;
+      history.forEach((msg, i) => {
+        output.textContent += `   ${i + 1}. [${msg.role}] ${msg.content.substring(0, 50)}...\n`;
+      });
+
+    } catch (error) {
+      output.textContent += `\n❌ Error: ${error.message}`;
+    }
+  }
+
+  /**
+   * Example 3: Backend Health Check
+   */
+  async function testBackendHealth() {
+    const output = document.getElementById('output3');
+    output.textContent = '⏳ Checking backend connection...\n';
+
+    try {
+      const isHealthy = await aiChat.checkHealth();
+
+      if (isHealthy) {
+        output.textContent = `✅ Backend is online!\n\n`;
+        output.textContent += `Backend URL: ${aiChat.config.backendURL}\n`;
+        output.textContent += `Max History: ${aiChat.config.maxHistory} messages\n`;
+        output.textContent += `Current History: ${aiChat.config.historyLength} messages\n`;
+        output.textContent += `\n✨ Ready to generate AI responses!`;
+      } else {
+        output.textContent = `❌ Backend is not responding.\n\n`;
+        output.textContent += `Make sure your server is running:\n`;
+        output.textContent += `cd "Carson Exports Chat" && npm start\n\n`;
+        output.textContent += `Expected output:\n`;
+        output.textContent += `🚗 Carson Exports AI Backend running on http://localhost:3001`;
+      }
+    } catch (error) {
+      output.textContent = `❌ Connection error: ${error.message}`;
+    }
+  }
+
+  /**
+   * Example 4: Change Backend URL
+   */
+  function changeBackendUrl() {
+    const output = document.getElementById('output4');
+    const newUrl = document.getElementById('newBackendUrl').value;
+
+    try {
+      aiChat.setBackendURL(newUrl);
+      output.textContent = `✅ Backend URL updated!\n\n`;
+      output.textContent += `New URL: ${newUrl}\n`;
+      output.textContent += `\nThe frontend will now send requests to your production backend.`;
+    } catch (error) {
+      output.textContent = `❌ Error: ${error.message}`;
+    }
+  }
+
+  /**
+   * Auto-check backend on page load
+   */
+  window.addEventListener('load', async () => {
+    const isHealthy = await aiChat.checkHealth();
+    const banner = document.createElement('div');
+
+    if (isHealthy) {
+      banner.className = 'success';
+      banner.innerHTML = '<strong>✅ Backend Connected!</strong> Your AI backend is running and ready.';
+    } else {
+      banner.className = 'warning';
+      banner.innerHTML = '<strong>⚠️ Backend Not Found</strong> Make sure to run <code>npm start</code> in the project directory.';
+    }
+
+    document.querySelector('.container').insertBefore(banner, document.querySelector('h1').nextSibling);
+  });
+</script>
+
+</body>
+</html>
