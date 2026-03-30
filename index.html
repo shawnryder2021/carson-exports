@@ -1333,16 +1333,37 @@ function showSMSTranscript(leadId){
   const lead=smsLeads.find(l=>l.id===leadId);
   if(!lead){alert('SMS lead not found');return}
   currentSMSLead=lead;
-  document.getElementById('smsModalTitle').innerHTML=`${lead.name} (${lead.phone})`;
+
+  // Build title with status badge
+  const statusColor=lead.status==='active'?'#3b82f6':lead.status==='booked'?'#10b981':lead.status==='submitted'?'#8b5cf6':'#6b7280';
+  const statusLabel=lead.status==='active'?'Active 🔵':lead.status==='booked'?'Booked ✅':lead.status==='submitted'?'Submitted 📤':'Closed ⭕';
+  document.getElementById('smsModalTitle').innerHTML=`<div style="display:flex;align-items:center;gap:1rem"><div>${lead.name} (${lead.phone})</div><span style="background:${statusColor};color:white;padding:0.25rem 0.75rem;border-radius:999px;font-size:0.8rem">${statusLabel}</span></div>`;
+
   const messagesDiv=document.getElementById('smsMessagesContainer');
+  let html='';
+
+  // Show appointment data if collected
+  if(lead.appointmentData && Object.keys(lead.appointmentData).length > 0){
+    html += '<div style="background:#f0f9ff;border-left:4px solid #3b82f6;padding:0.75rem;border-radius:4px;margin-bottom:1rem"><strong>📋 Collected Information:</strong><ul style="margin:0.5rem 0 0 1.5rem;padding:0;font-size:0.9rem">';
+    if(lead.appointmentData.name) html += `<li>👤 Name: <strong>${esc(lead.appointmentData.name)}</strong></li>`;
+    if(lead.appointmentData.phone) html += `<li>📱 Phone: <strong>${esc(lead.appointmentData.phone)}</strong></li>`;
+    if(lead.appointmentData.email) html += `<li>📧 Email: <strong>${esc(lead.appointmentData.email)}</strong></li>`;
+    if(lead.appointmentData.date) html += `<li>📅 Date: <strong>${esc(lead.appointmentData.date)}</strong></li>`;
+    if(lead.appointmentData.time) html += `<li>⏰ Time: <strong>${esc(lead.appointmentData.time)}</strong></li>`;
+    html += '</ul></div>';
+  }
+
+  // Show messages
   if(!lead.smsHistory||lead.smsHistory.length===0){
-    messagesDiv.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:2rem">No messages yet</p>';
+    html += '<p style="text-align:center;color:var(--text-muted);padding:2rem">No messages yet</p>';
   }else{
-    messagesDiv.innerHTML=lead.smsHistory.map(msg=>{
+    html += lead.smsHistory.map(msg=>{
       const isUser=msg.role==='user';
-      return`<div style="display:flex;justify-content:${isUser?'flex-end':'flex-start'}"><div style="background:${isUser?'var(--accent)':'#e5e7eb'};color:${isUser?'white':'black'};padding:0.75rem 1rem;border-radius:8px;max-width:80%;word-wrap:break-word">${esc(msg.content)}</div></div>`;
+      return`<div style="display:flex;justify-content:${isUser?'flex-end':'flex-start'};margin-bottom:0.5rem"><div style="background:${isUser?'var(--accent)':'#e5e7eb'};color:${isUser?'white':'black'};padding:0.75rem 1rem;border-radius:8px;max-width:80%;word-wrap:break-word;font-size:0.9rem">${esc(msg.content)}</div></div>`;
     }).join('');
   }
+
+  messagesDiv.innerHTML = html;
   document.getElementById('smsTranscriptModal').style.display='flex';
 }
 function closeSMSTranscript(){
@@ -1488,13 +1509,18 @@ function testSMSChat(){
     .then(data=>{
       if(data.success){
         resultBody.innerHTML=`<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Response received</span><br><br>${data.response}`;
-        // Update test lead with new message
+        // Update test lead with new message and state from backend
         const lead=smsLeads.find(l=>l.phone===phone);
         if(lead){
           lead.smsHistory.push({role:'user',content:message});
           lead.smsHistory.push({role:'assistant',content:data.response});
           lead.updatedAt=new Date().toISOString();
+          // Update state, appointment data, and status from backend response
+          if(data.leadState) lead.currentState=data.leadState;
+          if(data.appointmentData) lead.appointmentData=data.appointmentData;
+          if(data.status) lead.status=data.status;
           localStorage.setItem('smsLeads',JSON.stringify(smsLeads));
+          renderSMSLeads(); // Refresh the SMS leads table
         }
       }else{
         resultBody.innerHTML=`<span style="color:var(--error)"><i class="fas fa-exclamation-circle"></i> ERROR</span><br><br>${data.error||'Failed to process SMS'}`;

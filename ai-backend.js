@@ -238,28 +238,75 @@ function generateSMSSystemPrompt(dealershipSettings = {}, smsState = 'ah_menu', 
       stateGuidance = `CURRENT STATE: Initial SMS greeting (after-hours)
 - Customer just received initial SMS
 - Keep VERY short: under 160 characters (single SMS)
-- Offer 2-3 clear options
-- Example: "Hi ${leadData.name}! 🚗 Thanks for your interest. What can we help with? Reply: 1) Browse vehicles, 2) Book appointment, 3) Ask a question"`;
+- Offer 2-3 clear menu options
+- Use emojis to make it friendly
+- Example: "Hi ${leadData.name}! 🚗 Thanks for your interest. What can we help with? Reply:\n1️⃣ Browse vehicles\n2️⃣ Book appointment\n3️⃣ Ask a question"`;
       break;
 
     case 'ah_inventory':
       stateGuidance = `CURRENT STATE: Customer browsing vehicles via SMS
 - Keep responses SHORT: fit in 1-2 SMS messages (320 chars max)
 - Ask about preferences: vehicle type, budget, features
-- Share 1-2 vehicles with brief details
-- Example: "Great! We have a Honda CR-V, $28,900, 85k km - interested? Or want more options?"`;
+- Share 1-2 vehicle options with brief details and prices
+- If customer shows interest in booking, transition to appointment
+- Example: "Great! We have a Honda CR-V ($28,900, 85k km) and Toyota RAV4 ($25,500, 92k km). Interested? Reply with your choice!"`;
       break;
 
     case 'ah_appt_name':
+      stateGuidance = `CURRENT STATE: Collecting customer full name
+- The system will extract the name from their response
+- Ask clearly and conversationally: "What's your full name?"
+- Once they respond, CONFIRM their name: "Got it, ${leadData.appointmentData?.name || 'NAME'}!"
+- Then ask for phone: "What's the best number to reach you?"
+- Be friendly and natural, not robotic
+- If they provide multiple pieces of info (name + phone), acknowledge it and ask for the remaining fields`;
+      break;
+
     case 'ah_appt_phone':
+      stateGuidance = `CURRENT STATE: Collecting customer phone number
+- We already have name: "${leadData.appointmentData?.name || 'Not set yet'}"
+- Ask for phone: "What's the best number to reach you?"
+- The system will extract and validate the phone number
+- Accept various formats: (902) 555-1234 or 902-555-1234 or 9025551234
+- If they provide an invalid format, ask again politely
+- Once valid phone is extracted, confirm it: "Got it, 902-555-1234! What's your email?"`;
+      break;
+
     case 'ah_appt_email':
+      stateGuidance = `CURRENT STATE: Collecting customer email
+- We have: Name: "${leadData.appointmentData?.name || 'Not set'}" | Phone: "${leadData.appointmentData?.phone || 'Not set'}"
+- Ask for email: "What's your email address?"
+- The system will extract and validate the email
+- Once valid, confirm: "Got your email! When works best for an appointment?"
+- Then ask for appointment date in next message`;
+      break;
+
     case 'ah_appt_date':
+      stateGuidance = `CURRENT STATE: Collecting appointment date
+- All contact info collected: ${leadData.appointmentData?.name || 'name?'} | ${leadData.appointmentData?.phone || 'phone?'} | ${leadData.appointmentData?.email || 'email?'}
+- Ask about appointment timing: "When would work best for you? (e.g., tomorrow, next Tuesday, March 15)"
+- The system will extract dates in various formats
+- Accept: "tomorrow", "next Tuesday", "today", "3/15", "March 15", etc.
+- Confirm: "Perfect! Tomorrow works. What time would you prefer?"`;
+      break;
+
     case 'ah_appt_time':
-      stateGuidance = `CURRENT STATE: Collecting appointment field (${smsState})
-- Extract the required information naturally
-- Confirm the value in next message
-- Move to next field
-- Keep responses conversational and short`;
+      stateGuidance = `CURRENT STATE: Collecting appointment time
+- We have date: "${leadData.appointmentData?.date || 'Not set'}"
+- Ask for time: "What time works best? (e.g., 2 PM, 3:30 AM, 14:00)"
+- The system will extract times in various formats
+- Accept: "2 PM", "14:00", "3:30", "morning", etc.
+- Confirm: "Perfect! You're all set for ${leadData.appointmentData?.date || 'that date'} at TIME. Someone from Carson Exports will reach out with details. Thanks! 🚗"
+- This is the FINAL field - after time, appointment is complete`;
+      break;
+
+    case 'ah_confirmation':
+      stateGuidance = `CURRENT STATE: Appointment confirmed ✅
+- All information collected
+- Send final confirmation with all details
+- Make it friendly and enthusiastic
+- Example: "Thanks, ${leadData.appointmentData?.name || 'Customer'}! Your appointment is confirmed for ${leadData.appointmentData?.date || 'soon'} at ${leadData.appointmentData?.time || 'a great time'}. 🎉 Our team will reach out with more details. See you soon! 🚗"
+- Appointment has been submitted to CRM automatically`;
       break;
 
     default:
@@ -309,6 +356,110 @@ function updateSMSLead(phone, updates) {
     Object.assign(lead, updates, { updatedAt: new Date().toISOString() });
   }
   return lead;
+}
+
+// ============================================
+// FIELD EXTRACTION FUNCTIONS FOR SMS STATE MACHINE
+// ============================================
+
+/**
+ * Extract name from natural language
+ * Examples: "I'm John Smith", "My name's Sarah", "John Smith", "My name is Sarah Johnson"
+ */
+function extractName(message) {
+  const patterns = [
+    /(?:my name is|name is|my name's|i'm|i am|call me|this is)\s+([A-Za-z\s]+?)(?:\.|,|$)/i,
+    /^([A-Z][a-z]+ [A-Z][a-z]+)(?:\s|$)/,
+    /^([A-Z][a-z]+)(?:\s|$)/
+  ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match) {
+      const name = match[1].trim();
+      // Filter out common keywords that shouldn't be in names
+      if (!['is', 'the', 'and', 'or', 'a', 'an'].includes(name.toLowerCase())) {
+        return name;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract phone number from natural language
+ * Accepts multiple formats: (902) 555-1234, 902-555-1234, 902 555 1234, 9025551234
+ */
+function extractPhone(message) {
+  const phonePattern = /\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})/;
+  const match = message.match(phonePattern);
+  if (match) {
+    return `+1${match[1]}${match[2]}${match[3]}`;
+  }
+  return null;
+}
+
+/**
+ * Validate phone format
+ */
+function isValidPhone(phone) {
+  return /^\+1\d{10}$/.test(phone);
+}
+
+/**
+ * Extract email from natural language
+ */
+function extractEmail(message) {
+  const emailPattern = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/;
+  const match = message.match(emailPattern);
+  return match ? match[1] : null;
+}
+
+/**
+ * Validate email format
+ */
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/**
+ * Extract date from natural language
+ * Examples: "tomorrow", "next Tuesday", "March 15", "3/15"
+ */
+function extractDate(message) {
+  const datePatterns = [
+    /(?:next\s+)?(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/i,
+    /(?:tomorrow|today|tonight)/i,
+    /(\d{1,2})\s*\/\s*(\d{1,2})/,
+    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i
+  ];
+
+  for (const pattern of datePatterns) {
+    const match = message.match(pattern);
+    if (match) {
+      return match[0].trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract time from natural language
+ * Examples: "2 PM", "14:00", "3:30 AM", "1530"
+ */
+function extractTime(message) {
+  const timePatterns = [
+    /(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)?/,
+    /(\d{1,2})\s*(am|pm|AM|PM)/
+  ];
+
+  for (const pattern of timePatterns) {
+    const match = message.match(pattern);
+    if (match) {
+      return match[0].trim();
+    }
+  }
+  return null;
 }
 
 /**
@@ -534,6 +685,135 @@ app.post('/api/sms-chat', async (req, res) => {
     );
     smsLead.updatedAt = new Date().toISOString();
 
+    // ======================
+    // STATE TRANSITION LOGIC
+    // ======================
+    let nextState = smsLead.currentState;
+    let extractedData = {};
+
+    switch(smsLead.currentState) {
+      case 'ah_menu':
+        // User responding to menu - determine intent
+        if (message.toLowerCase().includes('1') || message.toLowerCase().includes('vehicle') || message.toLowerCase().includes('browse') || message.toLowerCase().includes('cars')) {
+          nextState = 'ah_inventory';
+        } else if (message.toLowerCase().includes('2') || message.toLowerCase().includes('appointment') || message.toLowerCase().includes('book') || message.toLowerCase().includes('schedule')) {
+          nextState = 'ah_appt_name';
+        } else if (message.toLowerCase().includes('3') || message.toLowerCase().includes('question') || message.toLowerCase().includes('info') || message.toLowerCase().includes('tell')) {
+          nextState = 'ah_freeform';
+        }
+        console.log(`📱 SMS menu selection: ${message} → state ${nextState}`);
+        break;
+
+      case 'ah_inventory':
+        // User browsing - if they say "book" or "appointment", move to booking
+        if (message.toLowerCase().includes('book') || message.toLowerCase().includes('appointment') || message.toLowerCase().includes('schedule') || message.toLowerCase().includes('thanks')) {
+          nextState = 'ah_appt_name';
+          console.log(`📱 SMS moving from inventory to appointment booking`);
+        }
+        // Otherwise stay in inventory
+        break;
+
+      case 'ah_appt_name':
+        extractedData.name = extractName(message);
+        if (extractedData.name) {
+          smsLead.appointmentData.name = extractedData.name;
+          nextState = 'ah_appt_phone';
+          console.log(`✅ Extracted name: ${extractedData.name}`);
+        } else {
+          console.log(`⚠️  No name found in: "${message}"`);
+        }
+        break;
+
+      case 'ah_appt_phone':
+        extractedData.phone = extractPhone(message);
+        if (extractedData.phone && isValidPhone(extractedData.phone)) {
+          smsLead.appointmentData.phone = extractedData.phone;
+          nextState = 'ah_appt_email';
+          console.log(`✅ Extracted phone: ${extractedData.phone}`);
+        } else {
+          console.log(`⚠️  Invalid phone format in: "${message}"`);
+        }
+        break;
+
+      case 'ah_appt_email':
+        extractedData.email = extractEmail(message);
+        if (extractedData.email && isValidEmail(extractedData.email)) {
+          smsLead.appointmentData.email = extractedData.email;
+          nextState = 'ah_appt_date';
+          console.log(`✅ Extracted email: ${extractedData.email}`);
+        } else {
+          console.log(`⚠️  Invalid email format in: "${message}"`);
+        }
+        break;
+
+      case 'ah_appt_date':
+        extractedData.date = extractDate(message);
+        if (extractedData.date) {
+          smsLead.appointmentData.date = extractedData.date;
+          nextState = 'ah_appt_time';
+          console.log(`✅ Extracted date: ${extractedData.date}`);
+        } else {
+          console.log(`⚠️  No date found in: "${message}"`);
+        }
+        break;
+
+      case 'ah_appt_time':
+        extractedData.time = extractTime(message);
+        if (extractedData.time) {
+          smsLead.appointmentData.time = extractedData.time;
+          smsLead.status = 'booked';  // Mark as booked immediately
+          nextState = 'ah_confirmation';  // Transition directly to confirmation
+          console.log(`✅ Extracted time: ${extractedData.time} - Appointment complete for ${smsLead.appointmentData.name}`);
+        } else {
+          console.log(`⚠️  No time found in: "${message}"`);
+        }
+        break;
+    }
+
+    // Update lead state
+    smsLead.currentState = nextState;
+    smsLead.updatedAt = new Date().toISOString();
+
+    // ======================
+    // APPOINTMENT SUBMISSION LOGIC
+    // ======================
+    // Submit to webhook when appointment is complete (booked status)
+    if (smsLead.status === 'booked' && smsLead.appointmentData.name && smsLead.appointmentData.phone && smsLead.appointmentData.email && smsLead.appointmentData.date && smsLead.appointmentData.time) {
+
+      // Format SMS lead for webhook submission
+      const webhookPayload = {
+        customer_name: smsLead.appointmentData.name,
+        customer_phone: smsLead.appointmentData.phone,
+        customer_email: smsLead.appointmentData.email,
+        appointment_date: smsLead.appointmentData.date,
+        appointment_time: smsLead.appointmentData.time,
+        department: smsLead.department,
+        vehicle_interest: smsLead.vehicleInterest,
+        channel: 'SMS',
+        source: smsLead.source,
+        sms_lead_id: smsLead.id,
+        sms_message_count: smsLead.smsHistory.length,
+        created_at: smsLead.createdAt
+      };
+
+      // Send to webhook (try environment variable first)
+      const webhookUrl = process.env.WEBHOOK_URL || process.env.CRM_WEBHOOK_URL;
+      if (webhookUrl) {
+        try {
+          await axios.post(webhookUrl, webhookPayload);
+          console.log(`✅ SMS appointment submitted to webhook for ${smsLead.appointmentData.name}`);
+          smsLead.status = 'submitted';
+        } catch (webhookError) {
+          console.error('Webhook submission error:', webhookError.message);
+          console.log(`⚠️  Webhook submission failed. Status remains 'booked'. Will retry if user sends another message.`);
+        }
+      } else {
+        console.warn(`⚠️  WEBHOOK_URL not set in environment variables.`);
+        console.log(`   Set WEBHOOK_URL in .env to enable automatic CRM webhook submission`);
+        console.log(`   Lead ID: ${smsLead.id} can be manually submitted from admin dashboard`);
+      }
+    }
+
     // Send response via Twilio
     try {
       await twilioClient.messages.create({
@@ -545,12 +825,14 @@ app.post('/api/sms-chat', async (req, res) => {
       console.error('Twilio SMS send error:', twilioError.message);
     }
 
-    console.log(`📱 SMS response sent to ${phone}`);
+    console.log(`📱 SMS response sent to ${phone} (state: ${smsLead.currentState})`);
 
     res.json({
       success: true,
       response: aiResponse,
-      leadState: smsLead.currentState
+      leadState: smsLead.currentState,
+      appointmentData: smsLead.appointmentData,
+      status: smsLead.status
     });
 
   } catch (error) {
