@@ -331,6 +331,7 @@ tr:hover td{background:var(--accent-glow)}
       <div class="admin-sidebar-title">Configuration</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('settings',this)"><i class="fas fa-building"></i> Dealership Settings</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('ai-knowledge',this)"><i class="fas fa-brain"></i> AI Knowledge</div>
+      <div class="admin-sidebar-item" onclick="switchAdminSection('twilio',this)"><i class="fas fa-mobile-screen"></i> Twilio Testing</div>
       <div class="admin-sidebar-title">Modules</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('retention',this)"><i class="fas fa-heart-pulse"></i> Customer Retention</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('webhook-log',this)"><i class="fas fa-plug"></i> Webhook Log</div>
@@ -441,6 +442,122 @@ Q: Do you have exotic cars? A: Yes! We carry Ferrari, McLaren, Bentley, Tesla, a
 Q: Is there a warranty? A: Many vehicles come with remaining manufacturer warranty. Ask about our extended warranty options.
 Q: Can I get a vehicle history report? A: Yes, we provide a free Carfax report with every vehicle.</textarea></div>
           <button class="btn btn-primary" onclick="saveAISettings()"><i class="fas fa-save"></i> Save AI Settings</button>
+        </div></div>
+      </div>
+
+      <div class="admin-section" id="section-twilio">
+        <h1 class="admin-page-title">📱 Twilio SMS Testing</h1>
+        <p class="admin-page-desc">Test your Twilio SMS integration before going live</p>
+
+        <!-- Twilio Configuration Status -->
+        <div class="card"><div class="card-header">Connection Status</div><div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+            <div style="padding:1rem;background:#f0f9ff;border-radius:6px;border-left:4px solid #1e6fff">
+              <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.25rem">Twilio Status</div>
+              <div id="twilioStatus" style="font-weight:bold">Checking...</div>
+            </div>
+            <div style="padding:1rem;background:#f0f9ff;border-radius:6px;border-left:4px solid #1e6fff">
+              <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.25rem">Backend</div>
+              <div id="backendStatus" style="font-weight:bold">Checking...</div>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="checkTwilioStatus()" style="margin-top:1rem"><i class="fas fa-sync"></i> Check Connection</button>
+        </div></div>
+
+        <!-- Test 1: ADF Webhook -->
+        <div class="card"><div class="card-header">Test 1: ADF Lead Webhook</div><div class="card-body">
+          <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1rem">Simulate receiving an ADF lead from your CRM. This will create an SMS lead and send a greeting message.</p>
+          <div class="form-group">
+            <label>Customer Name</label>
+            <input type="text" id="testADFName" placeholder="e.g., John Smith" value="John Smith">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="tel" id="testADFPhone" placeholder="e.g., 9025551234" value="9025551234">
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="testADFEmail" placeholder="e.g., john@example.com" value="john@example.com">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Vehicle Interest</label>
+              <input type="text" id="testADFVehicle" placeholder="e.g., Honda CR-V" value="Honda CR-V">
+            </div>
+            <div class="form-group">
+              <label>Department</label>
+              <select id="testADFDept"><option value="Sales" selected>Sales</option><option value="Service">Service</option></select>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="testADFWebhook()"><i class="fas fa-paper-plane"></i> Send Test ADF Payload</button>
+          <div id="adfResult" style="margin-top:1rem;padding:1rem;background:#f9fafb;border-radius:6px;display:none">
+            <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.5rem">Response:</div>
+            <div id="adfResultBody" style="font-family:monospace;font-size:.85rem;color:#374151"></div>
+          </div>
+        </div></div>
+
+        <!-- Test 2: SMS Chat -->
+        <div class="card"><div class="card-header">Test 2: SMS Chat Message</div><div class="card-body">
+          <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1rem">Send a test SMS message to an existing SMS lead. First, create a lead using Test 1 above.</p>
+          <div class="form-group">
+            <label>Phone Number (must match a lead)</label>
+            <input type="tel" id="testSMSPhone" placeholder="e.g., +19025551234" value="+19025551234">
+          </div>
+          <div class="form-group">
+            <label>Message</label>
+            <textarea id="testSMSMessage" placeholder="e.g., Tell me about the Honda CR-V" style="min-height:80px">Tell me about the Honda CR-V</textarea>
+          </div>
+          <button class="btn btn-primary" onclick="testSMSChat()"><i class="fas fa-comment-sms"></i> Send Test SMS</button>
+          <div id="smsResult" style="margin-top:1rem;padding:1rem;background:#f9fafb;border-radius:6px;display:none">
+            <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.5rem">AI Response:</div>
+            <div id="smsResultBody" style="font-family:monospace;font-size:.85rem;color:#374151;line-height:1.6"></div>
+          </div>
+        </div></div>
+
+        <!-- Test 3: View SMS Leads -->
+        <div class="card"><div class="card-header">Test 3: View Active SMS Leads</div><div class="card-body">
+          <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1rem">View all SMS leads created during testing.</p>
+          <button class="btn btn-primary" onclick="showTestSMSLeads()"><i class="fas fa-list"></i> Show SMS Leads</button>
+          <div id="testLeadsTable" style="margin-top:1rem;display:none">
+            <div class="table-wrap"><table><thead><tr><th>Phone</th><th>Name</th><th>Interest</th><th>Messages</th><th>Status</th><th>Created</th></tr></thead><tbody id="testLeadsBody"></tbody></table></div>
+          </div>
+        </div></div>
+
+        <!-- Configuration Guide -->
+        <div class="card"><div class="card-header">Setup Instructions</div><div class="card-body">
+          <div style="font-size:.9rem;line-height:1.8">
+            <p><strong>Step 1: Get Twilio Credentials</strong></p>
+            <ol style="margin-left:1.5rem;margin-bottom:1rem">
+              <li>Sign up at <a href="https://www.twilio.com" target="_blank">twilio.com</a></li>
+              <li>Go to Console → Account Info</li>
+              <li>Copy your Account SID and Auth Token</li>
+              <li>Get a Twilio phone number</li>
+            </ol>
+
+            <p><strong>Step 2: Configure Environment</strong></p>
+            <ol style="margin-left:1.5rem;margin-bottom:1rem">
+              <li>Edit <code style="background:#f3f4f6;padding:.2rem .4rem;border-radius:3px">.env</code> file in project root</li>
+              <li>Add:
+                <div style="background:#f3f4f6;padding:1rem;border-radius:6px;margin:0.5rem 0;font-family:monospace;font-size:.85rem;overflow-x:auto">
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx<br>
+TWILIO_AUTH_TOKEN=your_auth_token_here<br>
+TWILIO_PHONE_NUMBER=+1XXXXXXXXXX
+                </div>
+              </li>
+              <li>Restart backend: <code style="background:#f3f4f6;padding:.2rem .4rem;border-radius:3px">npm start</code></li>
+            </ol>
+
+            <p><strong>Step 3: Test Integration</strong></p>
+            <ol style="margin-left:1.5rem">
+              <li>Click "Check Connection" above</li>
+              <li>Use Test 1 to send a sample ADF lead</li>
+              <li>Check your phone for SMS greeting message</li>
+              <li>Use Test 2 to send an SMS reply</li>
+              <li>Verify AI response is received</li>
+            </ol>
+          </div>
         </div></div>
       </div>
 
@@ -1264,6 +1381,149 @@ function submitSMSLeadToWebhook(){
 }
 
 // =====================================================
+// TWILIO TESTING
+// =====================================================
+function checkTwilioStatus(){
+  document.getElementById('twilioStatus').innerHTML='<i class="fas fa-spinner" style="animation:spin 1s linear infinite"></i> Checking...';
+  document.getElementById('backendStatus').innerHTML='<i class="fas fa-spinner" style="animation:spin 1s linear infinite"></i> Checking...';
+
+  // Check backend health
+  fetch('http://localhost:3001/api/health')
+    .then(r=>r.json())
+    .then(data=>{
+      document.getElementById('backendStatus').innerHTML='<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Connected</span>';
+      const twilioEnabled=data.twilio==='enabled'?'Enabled':'Disabled';
+      const twilioColor=data.twilio==='enabled'?'var(--success)':'var(--warning)';
+      document.getElementById('twilioStatus').innerHTML=`<span style="color:${twilioColor}"><i class="fas fa-${data.twilio==='enabled'?'check-circle':'exclamation-circle'}"></i> ${twilioEnabled}</span>`;
+    })
+    .catch(err=>{
+      document.getElementById('backendStatus').innerHTML='<span style="color:var(--error)"><i class="fas fa-times-circle"></i> Not Running</span>';
+      document.getElementById('twilioStatus').innerHTML='<span style="color:var(--error)"><i class="fas fa-times-circle"></i> Unable to Check</span>';
+      alert('Error: Backend is not running at http://localhost:3001\n\nStart it with: npm start');
+    });
+}
+
+function testADFWebhook(){
+  const name=document.getElementById('testADFName').value;
+  const phone=document.getElementById('testADFPhone').value;
+  const email=document.getElementById('testADFEmail').value;
+  const vehicle=document.getElementById('testADFVehicle').value;
+  const dept=document.getElementById('testADFDept').value;
+
+  if(!name||!phone||!email){
+    alert('Please fill in all required fields');
+    return;
+  }
+
+  const payload={
+    customer_name:name,
+    customer_phone:phone,
+    customer_email:email,
+    vehicle_interest:vehicle,
+    department:dept
+  };
+
+  const resultDiv=document.getElementById('adfResult');
+  const resultBody=document.getElementById('adfResultBody');
+  resultBody.innerHTML='<i class="fas fa-spinner" style="animation:spin 1s linear infinite"></i> Sending test ADF payload...';
+  resultDiv.style.display='block';
+
+  fetch('http://localhost:3001/api/webhook/adf',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.success){
+        resultBody.innerHTML=`<span style="color:var(--success)"><i class="fas fa-check-circle"></i> SUCCESS!</span><br><br>Lead created: <strong>${data.leadId}</strong><br>Phone: ${data.customerPhone}<br><br><span style="color:var(--text-muted);font-size:.8rem">✅ SMS greeting message sent to ${data.customerPhone}</span>`;
+        // Store test lead
+        const testLead={
+          id:data.leadId,
+          phone:data.customerPhone,
+          name:name,
+          email:email,
+          vehicleInterest:vehicle,
+          department:dept,
+          source:'Test',
+          channel:'SMS',
+          status:'active',
+          currentState:'ah_menu',
+          createdAt:new Date().toISOString(),
+          updatedAt:new Date().toISOString(),
+          smsHistory:[{role:'assistant',content:'Hi '+name+'! 👋 Thanks for your interest in '+vehicle+'. What can we help with? 1) Browse vehicles 2) Book appointment 3) Ask a question'}],
+          appointmentData:{}
+        };
+        smsLeads.push(testLead);
+        localStorage.setItem('smsLeads',JSON.stringify(smsLeads));
+      }else{
+        resultBody.innerHTML=`<span style="color:var(--error)"><i class="fas fa-exclamation-circle"></i> ERROR</span><br><br>${data.error}`;
+      }
+    })
+    .catch(err=>{
+      resultBody.innerHTML=`<span style="color:var(--error)"><i class="fas fa-times-circle"></i> CONNECTION ERROR</span><br><br>${err.message}<br><br><span style="color:var(--text-muted);font-size:.8rem">Make sure backend is running: npm start</span>`;
+    });
+}
+
+function testSMSChat(){
+  const phone=document.getElementById('testSMSPhone').value;
+  const message=document.getElementById('testSMSMessage').value;
+
+  if(!phone||!message){
+    alert('Please fill in all fields');
+    return;
+  }
+
+  const resultDiv=document.getElementById('smsResult');
+  const resultBody=document.getElementById('smsResultBody');
+  resultBody.innerHTML='<i class="fas fa-spinner" style="animation:spin 1s linear infinite"></i> Sending message and waiting for AI response...';
+  resultDiv.style.display='block';
+
+  fetch('http://localhost:3001/api/sms-chat',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({phone:phone,message:message})
+  })
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.success){
+        resultBody.innerHTML=`<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Response received</span><br><br>${data.response}`;
+        // Update test lead with new message
+        const lead=smsLeads.find(l=>l.phone===phone);
+        if(lead){
+          lead.smsHistory.push({role:'user',content:message});
+          lead.smsHistory.push({role:'assistant',content:data.response});
+          lead.updatedAt=new Date().toISOString();
+          localStorage.setItem('smsLeads',JSON.stringify(smsLeads));
+        }
+      }else{
+        resultBody.innerHTML=`<span style="color:var(--error)"><i class="fas fa-exclamation-circle"></i> ERROR</span><br><br>${data.error||'Failed to process SMS'}`;
+      }
+    })
+    .catch(err=>{
+      resultBody.innerHTML=`<span style="color:var(--error)"><i class="fas fa-times-circle"></i> CONNECTION ERROR</span><br><br>${err.message}`;
+    });
+}
+
+function showTestSMSLeads(){
+  const tbody=document.getElementById('testLeadsBody');
+  const table=document.getElementById('testLeadsTable');
+
+  if(!smsLeads||smsLeads.length===0){
+    table.style.display='none';
+    alert('No SMS leads yet. Use Test 1 to create one.');
+    return;
+  }
+
+  tbody.innerHTML=smsLeads.map(lead=>{
+    const created=new Date(lead.createdAt).toLocaleDateString()+' '+new Date(lead.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const messages=lead.smsHistory?lead.smsHistory.length:0;
+    return`<tr><td><strong>${lead.phone}</strong></td><td>${lead.name}</td><td>${lead.vehicleInterest||'—'}</td><td>${messages}</td><td><span class="badge-pill badge-${lead.status==='active'?'blue':'green'}">${lead.status}</span></td><td>${created}</td></tr>`;
+  }).join('');
+  table.style.display='block';
+}
+
+// =====================================================
 // PBS RETENTION
 // =====================================================
 function importPBSCustomers(){pbsImported=true;renderPBSGrid(PBS_CUSTOMERS);const b=event.target.closest('button');b.innerHTML='<i class="fas fa-check"></i> Imported';b.disabled=true;setTimeout(()=>{b.innerHTML='<i class="fas fa-download"></i> Import Customers from PBS';b.disabled=false},3000)}
@@ -1317,7 +1577,7 @@ document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('clic
 // =====================================================
 // INIT
 // =====================================================
-initDealershipSettingsFromDOM();initializeLeads();initializeWebhookLog();loadChatHistoryFromStorage();renderInventory(INVENTORY);renderLeads();renderWebhookLog();updateStats();
+initDealershipSettingsFromDOM();initializeLeads();initializeWebhookLog();loadChatHistoryFromStorage();renderInventory(INVENTORY);renderLeads();renderWebhookLog();updateStats();setTimeout(()=>{checkTwilioStatus();renderSMSLeads()},500);
 setTimeout(()=>{if(!chatOpen)document.getElementById('chatBadge').style.display='flex'},3000);
 
 // Initialize AI integration if available
