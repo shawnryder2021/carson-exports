@@ -577,6 +577,11 @@ app.get('/api/health', (req, res) => {
 });
 
 /**
+ * Serve static files (index.html)
+ */
+app.use(express.static(__dirname));
+
+/**
  * POST /api/webhook/adf
  * Receives ADF-formatted lead from Make/Zapier email service
  * Initiates SMS conversation with customer
@@ -655,38 +660,8 @@ app.post('/api/sms-chat', async (req, res) => {
       return res.status(404).json({ error: 'SMS lead not found for phone: ' + phone });
     }
 
-    // Generate system prompt with SMS context
-    const systemPrompt = generateSMSSystemPrompt({}, smsLead.currentState, smsLead);
-
-    // Call OpenAI API for response
-    const response = await axios.post(OPENAI_API_URL, {
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...smsLead.smsHistory,
-        { role: 'user', content: message }
-      ],
-      temperature: 0.7,
-      max_tokens: 300,
-      top_p: 0.9
-    }, {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    const aiResponse = response.data.choices[0].message.content;
-
-    // Log messages in transcript
-    smsLead.smsHistory.push(
-      { role: 'user', content: message },
-      { role: 'assistant', content: aiResponse }
-    );
-    smsLead.updatedAt = new Date().toISOString();
-
     // ======================
-    // STATE TRANSITION LOGIC
+    // STATE TRANSITION LOGIC (RUN FIRST)
     // ======================
     let nextState = smsLead.currentState;
     let extractedData = {};
@@ -770,8 +745,42 @@ app.post('/api/sms-chat', async (req, res) => {
         break;
     }
 
-    // Update lead state
+    // Update lead state BEFORE generating prompt
     smsLead.currentState = nextState;
+    smsLead.updatedAt = new Date().toISOString();
+
+    // ======================
+    // GENERATE SYSTEM PROMPT (NOW WITH NEW STATE)
+    // ======================
+    const systemPrompt = generateSMSSystemPrompt({}, nextState, smsLead);
+
+    // ======================
+    // CALL OPENAI API
+    // ======================
+    const response = await axios.post(OPENAI_API_URL, {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...smsLead.smsHistory,
+        { role: 'user', content: message }
+      ],
+      temperature: 0.7,
+      max_tokens: 300,
+      top_p: 0.9
+    }, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const aiResponse = response.data.choices[0].message.content;
+
+    // Log messages in transcript
+    smsLead.smsHistory.push(
+      { role: 'user', content: message },
+      { role: 'assistant', content: aiResponse }
+    );
     smsLead.updatedAt = new Date().toISOString();
 
     // ======================
