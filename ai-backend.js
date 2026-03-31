@@ -747,12 +747,13 @@ function extractDate(message) {
 
 /**
  * Extract time from natural language
- * Examples: "2 PM", "14:00", "3:30 AM", "1530"
+ * Examples: "2 PM", "14:00", "3:30 AM", "morning", "afternoon", "evening"
  */
 function extractTime(message) {
   const timePatterns = [
     /(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)?/,
-    /(\d{1,2})\s*(am|pm|AM|PM)/
+    /(\d{1,2})\s*(am|pm|AM|PM)/,
+    /\b(morning|afternoon|evening|noon|lunchtime|lunch)\b/i
   ];
 
   for (const pattern of timePatterns) {
@@ -976,6 +977,10 @@ app.post('/api/webhook/adf', async (req, res) => {
         from: TWILIO_PHONE_NUMBER,
         to: smsLead.phone
       });
+
+      // Log the initial greeting so the AI has full conversation context from message 1
+      smsLead.smsHistory.push({ role: 'assistant', content: greetingBody });
+
     } catch (twilioError) {
       console.error('Twilio SMS Error:', twilioError.message);
       return res.status(500).json({ error: 'Failed to send SMS: ' + twilioError.message });
@@ -1015,11 +1020,30 @@ app.post('/api/sms-chat', async (req, res) => {
       return res.status(400).json({ error: 'Missing phone or message' });
     }
 
-    // Find SMS lead by phone
-    const smsLead = getSMSLeadByPhone(phone);
+    // Find SMS lead by phone — auto-create if this is a direct inbound texter with no ADF lead
+    let smsLead = getSMSLeadByPhone(phone);
 
     if (!smsLead) {
-      return res.status(404).json({ error: 'SMS lead not found for phone: ' + phone });
+      smsLead = {
+        id: 'sms_' + Date.now(),
+        phone: phone,
+        name: 'Customer',
+        email: '',
+        vehicleInterest: '',
+        department: 'Sales',
+        source: 'Direct SMS',
+        channel: 'SMS',
+        status: 'active',
+        currentState: 'ah_menu',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        smsHistory: [],
+        appointmentData: { name: '', phone: '', email: '', date: '', time: '' },
+        clickHistory: [],
+        interestScore: 0
+      };
+      smsLeads.push(smsLead);
+      console.log(`📱 Auto-created SMS lead for new inbound texter: ${phone}`);
     }
 
     // ======================
@@ -1029,17 +1053,22 @@ app.post('/api/sms-chat', async (req, res) => {
     let extractedData = {};
 
     switch(smsLead.currentState) {
-      case 'ah_menu':
-        // User responding to menu - determine intent
-        if (message.toLowerCase().includes('1') || message.toLowerCase().includes('vehicle') || message.toLowerCase().includes('browse') || message.toLowerCase().includes('cars')) {
-          nextState = 'ah_inventory';
-        } else if (message.toLowerCase().includes('2') || message.toLowerCase().includes('appointment') || message.toLowerCase().includes('book') || message.toLowerCase().includes('schedule')) {
+      case 'ah_menu': {
+        // User responding to menu - determine intent from natural language or numbered option
+        const menuLower = message.toLowerCase();
+        if (menuLower.includes('2') || menuLower.includes('appointment') || menuLower.includes('book') || menuLower.includes('schedule') || menuLower.includes('test drive') || menuLower.includes('visit') || menuLower.includes('come in')) {
           nextState = 'ah_appt_name';
-        } else if (message.toLowerCase().includes('3') || message.toLowerCase().includes('question') || message.toLowerCase().includes('info') || message.toLowerCase().includes('tell')) {
+        } else if (menuLower.includes('3') || menuLower.includes('question') || menuLower.includes('info') || menuLower.includes('tell') || menuLower.includes('help') || menuLower.includes('hours') || menuLower.includes('location') || menuLower.includes('financing') || menuLower.includes('trade')) {
           nextState = 'ah_freeform';
+        } else if (menuLower.includes('1') || menuLower.includes('vehicle') || menuLower.includes('browse') || menuLower.includes('car') || menuLower.includes('truck') || menuLower.includes('suv') || menuLower.includes('sedan') || menuLower.includes('van') || menuLower.includes('looking') || menuLower.includes('show me') || menuLower.includes('interested') || menuLower.includes('inventory')) {
+          nextState = 'ah_inventory';
+        } else {
+          // Default to inventory browsing for unrecognized input — AI will clarify
+          nextState = 'ah_inventory';
         }
-        console.log(`📱 SMS menu selection: ${message} → state ${nextState}`);
+        console.log(`📱 SMS menu selection: "${message}" → state ${nextState}`);
         break;
+      }
 
       case 'ah_inventory':
         // User browsing - if they say "book" or "appointment", move to booking
@@ -1105,6 +1134,32 @@ app.post('/api/sms-chat', async (req, res) => {
           console.log(`⚠️  No time found in: "${message}"`);
         }
         break;
+
+      case 'ah_freeform': {
+        // Allow pivot from freeform to booking or inventory
+        const freeformLower = message.toLowerCase();
+        if (freeformLower.includes('book') || freeformLower.includes('appointment') || freeformLower.includes('schedule') || freeformLower.includes('test drive') || freeformLower.includes('visit')) {
+          nextState = 'ah_appt_name';
+          console.log(`📱 SMS freeform → appointment booking`);
+        } else if (freeformLower.includes('vehicle') || freeformLower.includes('car') || freeformLower.includes('truck') || freeformLower.includes('suv') || freeformLower.includes('browse') || freeformLower.includes('show me') || freeformLower.includes('looking')) {
+          nextState = 'ah_inventory';
+          console.log(`📱 SMS freeform → inventory`);
+        }
+        break;
+      }
+
+      case 'ah_confirmation': {
+        // After appointment confirmed, allow them to keep browsing or start a new booking
+        const confirmLower = message.toLowerCase();
+        if (confirmLower.includes('book') || confirmLower.includes('appointment') || confirmLower.includes('schedule')) {
+          nextState = 'ah_appt_name';
+        } else if (confirmLower.includes('vehicle') || confirmLower.includes('browse') || confirmLower.includes('car') || confirmLower.includes('show me')) {
+          nextState = 'ah_inventory';
+        } else {
+          nextState = 'ah_freeform';
+        }
+        break;
+      }
     }
 
     // Update lead state BEFORE generating prompt
