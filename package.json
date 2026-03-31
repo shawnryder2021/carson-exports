@@ -18,10 +18,11 @@
   "author": "Carson Exports",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
+    "axios": "^1.6.5",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "axios": "^1.6.5",
+    "express": "^4.18.2",
+    "localtunnel": "^2.0.2",
     "twilio": "^3.84.0"
   },
   "devDependencies": {

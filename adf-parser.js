@@ -25,7 +25,9 @@ function parseADFPayload(data) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     smsHistory: [],
-    appointmentData: {}
+    appointmentData: {},
+    clickHistory: [],        // Tracks link clicks to build interest profile
+    interestScore: 0         // Increments with each click/engagement signal
   };
 }
 

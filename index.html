@@ -83,6 +83,7 @@ input,select,textarea{font-family:inherit;font-size:.875rem}
 .chat-bubble:hover{transform:scale(1.08)}
 .chat-bubble .badge{position:absolute;top:-2px;right:-2px;width:18px;height:18px;background:var(--danger);border-radius:50%;font-size:.65rem;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg)}
 @keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(30,111,255,.4)}70%{box-shadow:0 0 0 12px rgba(30,111,255,0)}100%{box-shadow:0 0 0 0 rgba(30,111,255,0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 .chat-window{position:fixed;bottom:1.5rem;right:1.5rem;width:400px;height:600px;max-height:calc(100vh - 80px);background:var(--card);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);border:1px solid var(--border);display:none;flex-direction:column;z-index:950;overflow:hidden;animation:chatSlideUp .3s ease}
 .chat-window.open{display:flex}
@@ -549,33 +550,102 @@ Q: Can I get a vehicle history report? A: Yes, we provide a free Carfax report w
         </div></div>
 
         <!-- Test 5: Real SMS Test with Real Phone -->
-        <div class="card"><div class="card-header">Test 5: Real SMS Test with Real Phone Number</div><div class="card-body">
-          <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1rem">Send a real SMS greeting to your phone and test the conversation with actual text messages. You'll receive SMS from Twilio, reply from your phone, and watch responses in real-time.</p>
+        <div class="card"><div class="card-header">Test 5: Real Two-Way SMS Test (Live Phone)</div><div class="card-body">
+          <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:1.25rem">Send a real SMS to your phone and have a live two-way AI conversation. Replies you send from your phone appear here in real-time.</p>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
-            <div class="form-group">
-              <label>Your Phone Number</label>
-              <input type="tel" id="realPhoneNumber" placeholder="902-488-4107" value="902-488-4107">
+          <!-- Step 1: Tunnel Setup (auto-configures Twilio) -->
+          <div id="tunnelSection" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:1rem;margin-bottom:1rem">
+            <div style="font-weight:700;margin-bottom:0.5rem;color:#166534">Step 1: Connect Two-Way SMS</div>
+            <p style="font-size:0.875rem;color:#166534;margin-bottom:0.75rem">Opens a tunnel and auto-configures Twilio so your phone replies reach this backend. When you stop, the original Twilio webhook is restored.</p>
+            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+              <button id="startTunnelBtn" class="btn btn-success" onclick="setupTunnel()" style="min-width:180px"><i class="fas fa-plug"></i> Connect Two-Way SMS</button>
+              <button id="stopTunnelBtn" class="btn btn-danger" onclick="stopTunnel()" style="min-width:180px;display:none"><i class="fas fa-stop-circle"></i> Disconnect</button>
+              <span id="tunnelStatus" style="font-size:0.875rem;color:#6b7280">Not connected</span>
             </div>
-            <div class="form-group">
-              <label>Vehicle Interest</label>
-              <input type="text" id="realVehicleInterest" placeholder="e.g., Honda CR-V" value="Honda CR-V">
+            <div id="tunnelDetails" style="display:none;margin-top:0.75rem;background:white;border:1px solid #86efac;border-radius:6px;padding:0.75rem;font-size:0.85rem">
+              <div style="display:flex;align-items:center;gap:0.5rem;color:#166534">
+                <span style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;animation:pulse 1.5s infinite"></span>
+                <strong>Connected</strong> — Twilio webhook auto-configured
+              </div>
+              <div style="margin-top:0.4rem;color:#374151">Webhook: <code id="tunnelWebhookUrl" style="background:#f3f4f6;padding:2px 6px;border-radius:3px;word-break:break-all;font-size:0.8rem"></code></div>
             </div>
           </div>
 
-          <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:1rem;margin-bottom:1rem;font-size:0.9rem">
-            <strong>⚠️ Important:</strong> You will receive an SMS from Twilio (+1-902-702-3777). Reply with any message to continue the conversation. The AI will respond and guide you through booking an appointment.
+          <!-- Step 2: Send SMS -->
+          <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:1rem;margin-bottom:1rem">
+            <div style="font-weight:700;margin-bottom:0.75rem;color:#1e40af">Step 2: Start Conversation</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+              <div class="form-group" style="margin:0">
+                <label>Your Phone Number</label>
+                <input type="tel" id="realPhoneNumber" placeholder="902-488-4107" value="902-488-4107">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label>Vehicle Interest</label>
+                <input type="text" id="realVehicleInterest" placeholder="e.g., Honda CR-V" value="Honda CR-V">
+              </div>
+            </div>
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+              <button id="realSMSBtn" class="btn btn-primary" onclick="startRealSMSTest()" style="flex:1;min-width:180px"><i class="fas fa-paper-plane"></i> Send SMS & Start Test</button>
+              <button class="btn btn-secondary" onclick="resetRealSMSTest()" style="min-width:120px"><i class="fas fa-redo"></i> Reset</button>
+            </div>
           </div>
 
-          <button class="btn btn-primary" onclick="startRealSMSTest()" style="width:100%"><i class="fas fa-paper-plane"></i> Send Real SMS & Wait for Response</button>
+          <!-- Live Conversation + Profile side-by-side -->
+          <div id="realSMSContainer" style="display:none;gap:1rem;margin-top:0">
 
-          <!-- Real SMS Conversation Display -->
-          <div id="realSMSContainer" style="display:none;margin-top:1.5rem;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;height:500px">
-            <div style="padding:1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-weight:bold">Real SMS Conversation (Live)</div>
-            <div id="realSMSMessages" style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:0.75rem;background:white"></div>
-            <div id="realSMSStatus" style="padding:1rem;background:#dbeafe;border-top:1px solid #e5e7eb;font-size:0.9rem;color:#1e40af">
-              <div style="font-weight:600;margin-bottom:0.5rem">📱 Waiting for SMS...</div>
-              <div style="font-size:0.85rem;opacity:0.8">Initial greeting SMS should arrive within 1-2 seconds. Then reply from your phone to continue the conversation.</div>
+            <!-- SMS Conversation -->
+            <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;height:500px">
+              <div style="padding:0.75rem 1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between">
+                <span style="font-weight:bold">💬 Live SMS Conversation</span>
+                <span id="realSMSLiveIndicator" style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;color:#166534">
+                  <span style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;animation:pulse 1.5s infinite"></span> Live
+                </span>
+              </div>
+              <div id="realSMSMessages" style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:0.75rem;background:white"></div>
+              <div id="realSMSStatus" style="padding:0.75rem 1rem;background:#dbeafe;border-top:1px solid #e5e7eb;font-size:0.875rem;color:#1e40af">
+                <div style="font-weight:600">📱 Waiting for SMS...</div>
+                <div style="font-size:0.8rem;opacity:0.8;margin-top:0.25rem">Greeting sent. Reply from your phone to continue.</div>
+              </div>
+            </div>
+
+            <!-- Lead Interest Profile -->
+            <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="padding:0.75rem 1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-weight:bold">🧠 Lead Interest Profile</div>
+              <div style="padding:1rem;flex:1;overflow-y:auto;background:white">
+
+                <!-- Score + summary -->
+                <div id="profileSummary" style="margin-bottom:1rem">
+                  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
+                    <div style="text-align:center;background:#eff6ff;border:2px solid #93c5fd;border-radius:10px;padding:0.5rem 1rem;min-width:64px">
+                      <div id="interestScore" style="font-size:1.5rem;font-weight:800;color:#1d4ed8">0</div>
+                      <div style="font-size:0.7rem;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em">Clicks</div>
+                    </div>
+                    <div style="flex:1">
+                      <div id="profileName" style="font-weight:600;font-size:0.95rem">Waiting for activity...</div>
+                      <div id="profileInterest" style="font-size:0.8rem;color:#6b7280;margin-top:0.2rem"></div>
+                      <div id="profileHeat" style="margin-top:0.4rem"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Click timeline -->
+                <div style="font-size:0.8rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem">Link Activity</div>
+                <div id="clickTimeline" style="display:flex;flex-direction:column;gap:0.5rem;min-height:60px">
+                  <div style="color:#9ca3af;font-size:0.85rem;font-style:italic">No clicks yet — links sent via SMS will be tracked here</div>
+                </div>
+
+                <!-- Vehicle interest tags -->
+                <div id="vehicleTagsSection" style="display:none;margin-top:1rem">
+                  <div style="font-size:0.8rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem">Vehicles Viewed</div>
+                  <div id="vehicleTags" style="display:flex;flex-wrap:wrap;gap:0.4rem"></div>
+                </div>
+
+                <!-- Appointment data -->
+                <div id="apptProfileSection" style="display:none;margin-top:1rem">
+                  <div style="font-size:0.8rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem">Appointment Data</div>
+                  <div id="apptProfileData" style="font-size:0.85rem;line-height:1.8;color:#374151"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div></div>
@@ -1735,145 +1805,298 @@ function wait(ms){
   return new Promise(r=>setTimeout(r,ms));
 }
 
+// ==================== REAL SMS TEST (TEST 5) ====================
+
+let realSMSPollInterval=null; // Track active poll interval to prevent duplicates
+
+async function setupTunnel(){
+  const btn=document.getElementById('startTunnelBtn');
+  const statusEl=document.getElementById('tunnelStatus');
+  const detailsEl=document.getElementById('tunnelDetails');
+  btn.disabled=true;
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Connecting...';
+  statusEl.innerHTML='<span style="color:#d97706">Opening tunnel & configuring Twilio...</span>';
+  try {
+    const r=await fetch('http://localhost:3001/api/start-tunnel',{method:'POST'}).then(x=>x.json());
+    if(r.success){
+      document.getElementById('tunnelWebhookUrl').textContent=r.webhookUrl;
+      detailsEl.style.display='block';
+      const twStatus=r.twilioConfigured?'Twilio auto-configured':'Twilio config skipped';
+      statusEl.innerHTML=`<span style="color:#166534;font-weight:600">✅ ${twStatus}</span>`;
+      btn.style.display='none';
+      document.getElementById('stopTunnelBtn').style.display='inline-flex';
+      // Change the tunnel section background to indicate active
+      document.getElementById('tunnelSection').style.background='#dcfce7';
+      document.getElementById('tunnelSection').style.borderColor='#22c55e';
+    } else {
+      statusEl.innerHTML=`<span style="color:#991b1b">❌ ${r.error}</span>`;
+      btn.disabled=false;
+      btn.innerHTML='<i class="fas fa-plug"></i> Connect Two-Way SMS';
+    }
+  } catch(err){
+    statusEl.innerHTML=`<span style="color:#991b1b">❌ Backend not running. Start with: npm start</span>`;
+    btn.disabled=false;
+    btn.innerHTML='<i class="fas fa-plug"></i> Connect Two-Way SMS';
+  }
+}
+
+async function stopTunnel(){
+  const btn=document.getElementById('stopTunnelBtn');
+  btn.disabled=true;
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Restoring...';
+  try {
+    await fetch('http://localhost:3001/api/stop-tunnel',{method:'POST'});
+  } catch(e){}
+  document.getElementById('tunnelStatus').innerHTML='<span style="color:#6b7280">Disconnected — original Twilio webhook restored</span>';
+  document.getElementById('tunnelDetails').style.display='none';
+  btn.style.display='none';
+  btn.disabled=false;
+  btn.innerHTML='<i class="fas fa-stop-circle"></i> Disconnect';
+  const startBtn=document.getElementById('startTunnelBtn');
+  startBtn.style.display='inline-flex';
+  startBtn.disabled=false;
+  startBtn.innerHTML='<i class="fas fa-plug"></i> Connect Two-Way SMS';
+  document.getElementById('tunnelSection').style.background='#f0fdf4';
+  document.getElementById('tunnelSection').style.borderColor='#86efac';
+}
+
 async function startRealSMSTest(){
   const phoneInput=document.getElementById('realPhoneNumber').value;
   const vehicleInterest=document.getElementById('realVehicleInterest').value||'Honda CR-V';
+  if(!phoneInput){ alert('Please enter your phone number'); return; }
 
-  if(!phoneInput){
-    alert('Please enter your phone number');
-    return;
-  }
-
-  // Normalize phone number
   const phone='+1'+phoneInput.replace(/\D/g,'').slice(-10);
 
-  // Show conversation container
+  // Prevent double-clicks
+  const btn=document.getElementById('realSMSBtn');
+  btn.disabled=true;
+  btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+  // Stop any existing poll
+  if(realSMSPollInterval){ clearInterval(realSMSPollInterval); realSMSPollInterval=null; }
+
   const container=document.getElementById('realSMSContainer');
   const messages=document.getElementById('realSMSMessages');
   const status=document.getElementById('realSMSStatus');
-
-  container.style.display='flex';
+  container.style.display='grid';
+  container.style.gridTemplateColumns='1fr 340px';
   messages.innerHTML='';
-  status.innerHTML='<div style="font-weight:600">📬 Creating SMS lead and sending greeting...</div>';
+  status.innerHTML='<div style="font-weight:600">📬 Sending SMS greeting...</div>';
 
   try {
-    // Step 1: Create ADF lead (sends initial SMS via Twilio)
+    // Create ADF lead (sends initial SMS via Twilio)
     const adfResponse=await fetch('http://localhost:3001/api/webhook/adf',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        customer_name:'SMS Test Customer',
-        customer_phone:phoneInput.replace(/\D/g,''),
-        customer_email:'test@example.com',
+        customer_name:'Shawn',
+        customer_phone:phoneInput.replace(/\D/g,'').slice(-10),
+        customer_email:'test@carsonexports.com',
         vehicle_interest:vehicleInterest,
         department:'Sales'
       })
     }).then(r=>r.json());
 
     if(!adfResponse.success){
-      status.innerHTML=`<div style="color:#991b1b">❌ Error: ${adfResponse.error}</div>`;
+      status.innerHTML=`<div style="color:#991b1b">❌ ${adfResponse.error}</div>`;
+      btn.disabled=false; btn.innerHTML='<i class="fas fa-paper-plane"></i> Send SMS & Start Test';
       return;
     }
 
-    addRealSMSMessage('system','✅ SMS greeting sent to '+phone);
-    addRealSMSMessage('system','📱 Check your phone for an SMS from +1-902-702-3777');
-    addRealSMSMessage('system','💬 Reply to any of these to continue the conversation:');
-    addRealSMSMessage('system','- "2" to book an appointment');
-    addRealSMSMessage('system','- "Hi" to start chatting');
-    addRealSMSMessage('system','- Any question about vehicles');
+    if(adfResponse.existing){
+      addRealSMSMessage('system','♻️ Existing lead found for '+phone+' — reusing conversation (no duplicate SMS sent)');
+    } else {
+      addRealSMSMessage('system','✅ SMS greeting sent to '+phone);
+    }
+    addRealSMSMessage('system','📱 Check your phone — reply to continue the conversation');
+    addRealSMSMessage('system','Try: "2" (book appt) · "Hi" · or any vehicle question');
 
-    status.innerHTML=`<div style="font-weight:600;color:#166534">⏳ Polling for incoming SMS...</div><div style="font-size:0.85rem;opacity:0.8;margin-top:0.5rem">Refresh rate: every 2 seconds</div>`;
+    btn.innerHTML='<i class="fas fa-check"></i> SMS Sent';
 
-    // Step 2: Poll for incoming SMS messages
-    let lastMessageCount=0;
+    // Poll for messages + profile updates every 2 seconds
+    let lastCount=0;
+    let lastClickCount=0;
+    let prevApptKeys='';
     let pollCount=0;
-    const maxPolls=150; // Poll for 5 minutes (2 second intervals)
+    const maxPolls=150;
 
-    const pollInterval=setInterval(async ()=>{
+    realSMSPollInterval=setInterval(async ()=>{
       pollCount++;
-
       try {
-        // Check SMS lead status
-        const statusResponse=await fetch(`http://localhost:3001/api/sms-lead-status/${phone}`)
-          .then(r=>r.json());
+        const resp=await fetch(`http://localhost:3001/api/sms-lead-status/${encodeURIComponent(phone)}`).then(r=>r.json());
+        if(resp.success&&resp.lead){
+          const lead=resp.lead;
 
-        if(statusResponse.success&&statusResponse.lead){
-          const lead=statusResponse.lead;
-          const currentMessageCount=lead.smsHistory.length;
-
-          // Display new messages
-          if(currentMessageCount>lastMessageCount){
-            // Add new messages
-            for(let i=lastMessageCount;i<currentMessageCount;i++){
-              const msg=lead.smsHistory[i];
-              const role=msg.role==='user'?'user':'assistant';
-              addRealSMSMessage(role,msg.content);
+          // Render any new messages
+          if(lead.smsHistory.length>lastCount){
+            for(let i=lastCount;i<lead.smsHistory.length;i++){
+              const m=lead.smsHistory[i];
+              addRealSMSMessage(m.role==='user'?'user':'assistant',m.content);
             }
-            lastMessageCount=currentMessageCount;
-
-            // Show appointment data if collected
-            if(lead.appointmentData&&Object.keys(lead.appointmentData).length>0){
-              let apptInfo='📋 Collected: ';
-              if(lead.appointmentData.name) apptInfo+=lead.appointmentData.name;
-              if(lead.appointmentData.phone) apptInfo+=' | '+lead.appointmentData.phone;
-              if(lead.appointmentData.email) apptInfo+=' | '+lead.appointmentData.email;
-              if(lead.appointmentData.date) apptInfo+=' | '+lead.appointmentData.date;
-              if(lead.appointmentData.time) apptInfo+=' | '+lead.appointmentData.time;
-              addRealSMSMessage('info',apptInfo);
-            }
-
-            // Check if appointment is booked
-            if(lead.status==='booked'){
-              addRealSMSMessage('info','✅ APPOINTMENT BOOKED - Lead ready for CRM submission');
-              status.innerHTML=`<div style="font-weight:600;color:#166534">✅ Appointment booked successfully!</div><div style="font-size:0.85rem;opacity:0.8;margin-top:0.5rem">You can continue texting or stop the test.</div>`;
-            }
+            lastCount=lead.smsHistory.length;
           }
 
-          status.innerHTML=`<div style="font-weight:600;color:#166534">⏳ Waiting for SMS... (${lead.smsHistory.length} messages)</div><div style="font-size:0.85rem;opacity:0.8;margin-top:0.5rem">Refresh rate: every 2 seconds</div>`;
+          // Show appointment data changes as inline info
+          const apptKeys=JSON.stringify(lead.appointmentData||{});
+          if(apptKeys!==prevApptKeys&&Object.keys(lead.appointmentData||{}).length>0){
+            prevApptKeys=apptKeys;
+            const d=lead.appointmentData;
+            const parts=[];
+            if(d.name) parts.push('Name: '+d.name);
+            if(d.phone) parts.push('Phone: '+d.phone);
+            if(d.email) parts.push('Email: '+d.email);
+            if(d.date) parts.push('Date: '+d.date);
+            if(d.time) parts.push('Time: '+d.time);
+            if(parts.length) addRealSMSMessage('info','📋 Collected → '+parts.join(' | '));
+          }
+
+          // Update lead profile panel
+          updateLeadProfile(lead);
+
+          // New click detected — show notification in chat
+          const clicks=lead.clickHistory||[];
+          if(clicks.length>lastClickCount){
+            for(let i=lastClickCount;i<clicks.length;i++){
+              addRealSMSMessage('info','🖱️ Link opened: '+clicks[i].label);
+            }
+            lastClickCount=clicks.length;
+          }
+
+          if(lead.status==='booked'||lead.status==='submitted'){
+            addRealSMSMessage('info','🎉 APPOINTMENT BOOKED! Lead is ready for CRM.');
+            updateLeadProfile(lead);
+            clearInterval(realSMSPollInterval); realSMSPollInterval=null;
+            status.innerHTML='<div style="font-weight:600;color:#166534">✅ Appointment booked successfully!</div>';
+            return;
+          }
+
+          status.innerHTML=`<div style="font-weight:600;color:#166534">⏳ Live — ${lastCount} messages · ${(lead.clickHistory||[]).length} clicks · State: ${lead.currentState}</div><div style="font-size:0.8rem;opacity:0.8;margin-top:0.25rem">Replies arrive via Twilio webhook in ~2s</div>`;
         }
-      } catch(err){
-        console.error('Poll error:',err);
-      }
+      } catch(e){ console.error('Poll error:',e); }
 
       if(pollCount>=maxPolls){
-        clearInterval(pollInterval);
-        status.innerHTML=`<div style="font-weight:600;color:#92400e">⏱️ Polling timeout (5 minutes)</div><div style="font-size:0.85rem;opacity:0.8;margin-top:0.5rem">You can still reply to SMS - messages may take a moment to appear</div>`;
+        clearInterval(realSMSPollInterval); realSMSPollInterval=null;
+        status.innerHTML='<div style="font-weight:600;color:#92400e">⏱️ Polling stopped (5 min). You can still reply to the SMS.</div>';
       }
     },2000);
 
   } catch(err){
-    status.innerHTML=`<div style="color:#991b1b">❌ Error: ${err.message}</div>`;
+    status.innerHTML=`<div style="color:#991b1b">❌ ${err.message}</div>`;
+    btn.disabled=false; btn.innerHTML='<i class="fas fa-paper-plane"></i> Send SMS & Start Test';
   }
+}
+
+async function resetRealSMSTest(){
+  const phoneInput=document.getElementById('realPhoneNumber').value;
+  if(!phoneInput) return;
+  const phone=phoneInput.replace(/\D/g,'').slice(-10);
+
+  // Stop polling
+  if(realSMSPollInterval){ clearInterval(realSMSPollInterval); realSMSPollInterval=null; }
+
+  // Delete lead from backend
+  try {
+    await fetch(`http://localhost:3001/api/sms-lead/${phone}`,{method:'DELETE'});
+  } catch(e){}
+
+  // Reset UI
+  document.getElementById('realSMSMessages').innerHTML='';
+  document.getElementById('realSMSContainer').style.display='none';
+  document.getElementById('realSMSStatus').innerHTML='<div style="font-weight:600">📱 Waiting for SMS...</div>';
+  const btn=document.getElementById('realSMSBtn');
+  btn.disabled=false;
+  btn.innerHTML='<i class="fas fa-paper-plane"></i> Send SMS & Start Test';
+  addRealSMSMessage('system','✅ Lead cleared. Ready to start a fresh test.');
+  document.getElementById('realSMSContainer').style.display='flex';
 }
 
 function addRealSMSMessage(role,text){
   const container=document.getElementById('realSMSMessages');
+  if(!container) return;
   const msgDiv=document.createElement('div');
-
-  let bgColor='#e5e7eb';
-  let textColor='black';
-  let prefix='🤖';
-  let alignment='flex-start';
-
-  if(role==='user'){
-    bgColor='var(--accent)';
-    textColor='white';
-    prefix='👤';
-    alignment='flex-end';
-  } else if(role==='info'){
-    bgColor='#fef3c7';
-    textColor='#92400e';
-    prefix='ℹ️';
-  } else if(role==='system'){
-    bgColor='#dbeafe';
-    textColor='#1e40af';
-    prefix='📢';
-  }
-
-  msgDiv.style.cssText=`display:flex;justify-content:${alignment};gap:0.5rem`;
-  msgDiv.innerHTML=`<div style="background:${bgColor};color:${textColor};padding:0.75rem 1rem;border-radius:8px;max-width:80%;word-wrap:break-word;font-size:0.9rem">${prefix} ${esc(text)}</div>`;
+  let bg='#e5e7eb',color='#111',prefix='🤖',align='flex-start';
+  if(role==='user'){ bg='var(--accent)'; color='white'; prefix='👤'; align='flex-end'; }
+  else if(role==='info'){ bg='#fef3c7'; color='#92400e'; prefix='ℹ️'; }
+  else if(role==='system'){ bg='#dbeafe'; color='#1e40af'; prefix='📢'; }
+  else if(role==='error'){ bg='#fee2e2'; color='#991b1b'; prefix='⚠️'; }
+  msgDiv.style.cssText=`display:flex;justify-content:${align};gap:0.5rem`;
+  msgDiv.innerHTML=`<div style="background:${bg};color:${color};padding:0.75rem 1rem;border-radius:8px;max-width:80%;word-wrap:break-word;font-size:0.875rem">${prefix} ${esc(text)}</div>`;
   container.appendChild(msgDiv);
   container.scrollTop=container.scrollHeight;
+}
+
+function updateLeadProfile(lead){
+  // Score
+  const score=lead.interestScore||0;
+  const scoreEl=document.getElementById('interestScore');
+  if(scoreEl) scoreEl.textContent=score;
+
+  // Name + initial interest
+  const nameEl=document.getElementById('profileName');
+  if(nameEl) nameEl.textContent=lead.name+(lead.vehicleInterest?' — '+lead.vehicleInterest:'');
+  const intEl=document.getElementById('profileInterest');
+  if(intEl) intEl.textContent=lead.currentState.replace('ah_','').replace(/_/g,' ').toUpperCase()+' · State';
+
+  // Heat indicator
+  const heatEl=document.getElementById('profileHeat');
+  if(heatEl){
+    let heat='🌡️ Cold';
+    let heatColor='#6b7280';
+    if(score>=5){ heat='🔥 Hot'; heatColor='#dc2626'; }
+    else if(score>=3){ heat='🌶️ Warm'; heatColor='#d97706'; }
+    else if(score>=1){ heat='✨ Interested'; heatColor='#2563eb'; }
+    heatEl.innerHTML=`<span style="font-size:0.8rem;font-weight:600;color:${heatColor}">${heat}</span>`;
+  }
+
+  // Click timeline
+  const clicks=lead.clickHistory||[];
+  const timelineEl=document.getElementById('clickTimeline');
+  if(timelineEl){
+    if(clicks.length===0){
+      timelineEl.innerHTML='<div style="color:#9ca3af;font-size:0.85rem;font-style:italic">No clicks yet — links sent via SMS will be tracked here</div>';
+    } else {
+      timelineEl.innerHTML=clicks.slice().reverse().map(c=>{
+        const t=new Date(c.timestamp);
+        const timeStr=t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        return `<div style="display:flex;gap:0.5rem;align-items:flex-start;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:0.5rem 0.75rem">
+          <span style="font-size:1rem;margin-top:1px">🖱️</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.85rem;font-weight:600;color:#166534;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.label)}</div>
+            <div style="font-size:0.75rem;color:#6b7280">${timeStr}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Vehicle tags — extract from click labels
+  const vehicleClicks=clicks.filter(c=>c.url&&c.url.includes('carsonexports.com/inventory'));
+  const vehicleTagsSection=document.getElementById('vehicleTagsSection');
+  const vehicleTags=document.getElementById('vehicleTags');
+  if(vehicleClicks.length>0&&vehicleTagsSection&&vehicleTags){
+    vehicleTagsSection.style.display='block';
+    const seen=new Set();
+    const tagsHtml=vehicleClicks.filter(c=>{ if(seen.has(c.label)) return false; seen.add(c.label); return true; })
+      .map(c=>`<span style="background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;padding:0.25rem 0.6rem;border-radius:12px;font-size:0.8rem;font-weight:500">${esc(c.label)}</span>`)
+      .join('');
+    vehicleTags.innerHTML=tagsHtml;
+  }
+
+  // Appointment data
+  const d=lead.appointmentData||{};
+  const hasAppt=Object.values(d).some(v=>v);
+  const apptSection=document.getElementById('apptProfileSection');
+  const apptData=document.getElementById('apptProfileData');
+  if(hasAppt&&apptSection&&apptData){
+    apptSection.style.display='block';
+    const rows=[];
+    if(d.name) rows.push(`<div><strong>Name:</strong> ${esc(d.name)}</div>`);
+    if(d.phone) rows.push(`<div><strong>Phone:</strong> ${esc(d.phone)}</div>`);
+    if(d.email) rows.push(`<div><strong>Email:</strong> ${esc(d.email)}</div>`);
+    if(d.date) rows.push(`<div><strong>Date:</strong> ${esc(d.date)}</div>`);
+    if(d.time) rows.push(`<div><strong>Time:</strong> ${esc(d.time)}</div>`);
+    apptData.innerHTML=rows.join('');
+  }
 }
 
 function showTestSMSLeads(){

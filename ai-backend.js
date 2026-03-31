@@ -17,13 +17,27 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const twilio = require('twilio');
+const localtunnel = require('localtunnel');
+
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Load inventory data
+let inventory = [];
+try {
+  inventory = JSON.parse(fs.readFileSync(path.join(__dirname, 'inventory.json'), 'utf8'));
+  console.log(`📦 Loaded ${inventory.length} vehicles from inventory.json`);
+} catch (err) {
+  console.warn('⚠️  Could not load inventory.json:', err.message);
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Twilio sends form-encoded webhooks
 
 // OpenAI API Configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -53,6 +67,58 @@ if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER) {
 
 // SMS Leads Storage (in-memory, could be moved to database for production)
 let smsLeads = [];
+
+// Tunnel management
+let activeTunnel = null;
+let originalTwilioWebhookUrl = null; // Stored so we can restore it when tunnel stops
+let twilioPhoneSid = null; // Twilio phone number resource SID
+
+// Link tracking store: { trackingId: { url, leadPhone, label, createdAt, clicks } }
+let trackingLinks = {};
+
+/**
+ * Create a tracking link for a destination URL, tied to a specific lead
+ * @param {string} url - Destination URL
+ * @param {string} leadPhone - Lead's phone number (E.164)
+ * @param {string} label - Human-readable description (e.g. "2019 Honda CR-V")
+ * @returns {string} - Short tracking ID
+ */
+function createTrackingLink(url, leadPhone, label) {
+  const id = Math.random().toString(36).substr(2, 9);
+  trackingLinks[id] = { url, leadPhone, label, createdAt: new Date().toISOString(), clicks: 0 };
+  return id;
+}
+
+/**
+ * Derive a human-readable label from a URL
+ * e.g. "https://carsonexports.com/inventory/2019-honda-crv" → "2019 Honda CRV listing"
+ */
+function labelFromUrl(url) {
+  try {
+    const path = new URL(url).pathname;
+    const slug = path.split('/').filter(Boolean).pop() || '';
+    return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || url;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Wrap any URLs inside a text string with tracking redirect links
+ * Only works when activeTunnel is running (otherwise URLs pass through unchanged)
+ * @param {string} text - The message text (may contain URLs)
+ * @param {string} leadPhone - Lead phone for attribution
+ * @returns {string} - Text with URLs replaced by tracking links
+ */
+function wrapUrlsWithTracking(text, leadPhone) {
+  if (!activeTunnel || !text) return text;
+  const urlRegex = /https?:\/\/[^\s<>"]+[^\s<>",.:;?!)'"\]]/g;
+  return text.replace(urlRegex, (url) => {
+    const label = labelFromUrl(url);
+    const id = createTrackingLink(url, leadPhone, label);
+    return `${activeTunnel.url}/t/${id}`;
+  });
+}
 
 /**
  * Generate system prompt dynamically based on dealership settings and chat state
@@ -222,7 +288,7 @@ Remember: This is a natural conversation between a helpful AI and a customer. Re
  * @param {Object} leadData - SMS lead data for context
  * @returns {string} - SMS-optimized system prompt
  */
-function generateSMSSystemPrompt(dealershipSettings = {}, smsState = 'ah_menu', leadData = {}) {
+function generateSMSSystemPrompt(dealershipSettings = {}, smsState = 'ah_menu', leadData = {}, currentMessage = '') {
   const settings = {
     dealershipName: dealershipSettings.dealershipName || 'Carson Exports',
     phone: dealershipSettings.phone || '1-833-706-3093',
@@ -234,23 +300,58 @@ function generateSMSSystemPrompt(dealershipSettings = {}, smsState = 'ah_menu', 
   let stateGuidance = '';
 
   switch(smsState) {
-    case 'ah_menu':
+    case 'ah_menu': {
+      // If we know what they're interested in, find a quick match to tease
+      let vehicleTease = '';
+      if (leadData.vehicleInterest) {
+        const quickMatch = searchInventory(leadData.vehicleInterest, 1);
+        if (quickMatch.length > 0) {
+          const v = quickMatch[0];
+          vehicleTease = `\n\nWe have a matching vehicle you can mention: ${v.year} ${v.make} ${v.model} ${v.trim} at $${v.price.toLocaleString()} — link: ${v.url}\nFeel free to include this link in the greeting to spark interest.`;
+        }
+      }
       stateGuidance = `CURRENT STATE: Initial SMS greeting (after-hours)
-- Customer just received initial SMS
-- Keep VERY short: under 160 characters (single SMS)
+- Customer just received initial SMS about "${leadData.vehicleInterest || 'vehicles'}"
+- If we have a matching vehicle, include its link to drive engagement
 - Offer 2-3 clear menu options
-- Use emojis to make it friendly
-- Example: "Hi ${leadData.name}! 🚗 Thanks for your interest. What can we help with? Reply:\n1️⃣ Browse vehicles\n2️⃣ Book appointment\n3️⃣ Ask a question"`;
+- Use emojis to make it friendly${vehicleTease}`;
       break;
+    }
 
-    case 'ah_inventory':
+    case 'ah_inventory': {
+      // Use current message as primary search (it's not in history yet at prompt-generation time)
+      // Fall back to last history message, then vehicle interest
+      const userMsgs = (leadData.smsHistory || []).filter(m => m.role === 'user');
+      const lastHistoryMsg = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].content : '';
+      const searchTerms = (currentMessage.length > 2 ? currentMessage : lastHistoryMsg) || leadData.vehicleInterest || '';
+      const matches = searchInventory(searchTerms, 3);
+      const inventoryBlock = matches.length > 0
+        ? 'MATCHING VEHICLES IN STOCK:\n' + matches.map(formatVehicleForPrompt).join('\n\n')
+        : 'No exact matches found — ask the customer for more details about what they want.';
+
       stateGuidance = `CURRENT STATE: Customer browsing vehicles via SMS
-- Keep responses SHORT: fit in 1-2 SMS messages (320 chars max)
-- Ask about preferences: vehicle type, budget, features
-- Share 1-2 vehicle options with brief details and prices
-- If customer shows interest in booking, transition to appointment
-- Example: "Great! We have a Honda CR-V ($28,900, 85k km) and Toyota RAV4 ($25,500, 92k km). Interested? Reply with your choice!"`;
+
+${inventoryBlock}
+
+MANDATORY RULES (MUST follow):
+1. You MUST list 1-3 vehicles from MATCHING VEHICLES above in EVERY response — never ask "would you like to see options?" without showing them
+2. For EACH vehicle, you MUST include its Link URL on its own line — this is CRITICAL for tracking
+3. Format EXACTLY like this for each vehicle:
+   🚗 YEAR MAKE MODEL TRIM — $PRICE, MILEAGEk km
+   LINK_URL
+4. After listing vehicles, ask ONE question: "Want to book a test drive?" or "Which one catches your eye?"
+5. NEVER say "would you like to see options" or "do you want to see" — just SHOW them immediately
+6. If the vehicles above don't match what the customer asked for, still show the closest matches and explain why
+
+Example response:
+"Here is what we have got!
+2021 Honda CR-V EX-L AWD — $32,900, 58k km, leather & sunroof!
+https://carsonexports.com/inventory/2021-honda-crv-exl
+2020 Honda CR-V Sport AWD — $28,500, 74k km, remote start!
+https://carsonexports.com/inventory/2020-honda-crv-sport
+Want to book a test drive for either one?`;
       break;
+    }
 
     case 'ah_appt_name':
       stateGuidance = `CURRENT STATE: Collecting customer full name
@@ -309,6 +410,20 @@ function generateSMSSystemPrompt(dealershipSettings = {}, smsState = 'ah_menu', 
 - Appointment has been submitted to CRM automatically`;
       break;
 
+    case 'ah_freeform': {
+      const freeformMatches = searchInventory(currentMessage || leadData.vehicleInterest || '', 2);
+      const freeformInventory = freeformMatches.length > 0
+        ? '\n\nRELEVANT VEHICLES IN STOCK:\n' + freeformMatches.map(formatVehicleForPrompt).join('\n\n')
+        : '';
+
+      stateGuidance = `CURRENT STATE: Answering customer questions
+- Answer their question helpfully and concisely
+- If the question relates to a vehicle, include a relevant inventory link from below
+- Always offer to help with browsing vehicles or booking an appointment
+- If they mention wanting to see a vehicle, transition to appointment booking${freeformInventory}`;
+      break;
+    }
+
     default:
       stateGuidance = `Current SMS state: ${smsState}`;
   }
@@ -338,6 +453,54 @@ STATE-AWARE BEHAVIOR:
 ${stateGuidance}
 
 Remember: You're texting, not emailing. Keep it brief, natural, and friendly.`;
+}
+
+/**
+ * Search inventory by keywords — fuzzy match against make, model, trim, color, features
+ * Returns top matches sorted by relevance
+ * @param {string} query - Search terms (e.g. "honda crv", "suv under 30k", "red")
+ * @param {number} limit - Max results to return
+ * @returns {Array} - Matching vehicles
+ */
+function searchInventory(query, limit = 4) {
+  if (!inventory.length || !query) return inventory.slice(0, limit);
+
+  const stopWords = new Set(['the','is','at','in','on','to','for','of','and','or','do','you','have','any','what','how','can','with','this','that','are','was','be','an','it','we','my','me','your','about','would','like','want','some','get','got','see','show','tell','anything','something','does','did']);
+  const terms = query.toLowerCase().replace(/[?!.,;:'"]/g, '').split(/[\s,]+/).filter(t => t.length > 1 && !stopWords.has(t));
+
+  // Score each vehicle
+  const scored = inventory.map(v => {
+    const haystack = [
+      v.make, v.model, v.trim, v.color, String(v.year), String(v.price),
+      ...(v.features || [])
+    ].join(' ').toLowerCase();
+
+    let score = 0;
+    for (const term of terms) {
+      if (v.make.toLowerCase().includes(term)) score += 10;      // Strong make match
+      if (v.model.toLowerCase().includes(term)) score += 10;     // Strong model match
+      if (haystack.includes(term)) score += 3;                    // General match
+      // Price-based matching
+      if (term.match(/^\d+k?$/) || term === 'under' || term === 'budget') {
+        const num = parseInt(term.replace('k', '000'));
+        if (num > 1000 && v.price <= num * 1.15) score += 5;     // Within budget
+      }
+    }
+    return { vehicle: v, score };
+  });
+
+  return scored
+    .filter(s => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(s => s.vehicle);
+}
+
+/**
+ * Format a vehicle for inclusion in an SMS system prompt
+ */
+function formatVehicleForPrompt(v) {
+  return `• ${v.year} ${v.make} ${v.model} ${v.trim} — $${v.price.toLocaleString()}, ${(v.mileage / 1000).toFixed(0)}k km, ${v.color}\n  Features: ${v.features.slice(0, 3).join(', ')}\n  Link: ${v.url}`;
 }
 
 /**
@@ -604,13 +767,40 @@ app.post('/api/webhook/adf', async (req, res) => {
       return res.status(400).json({ error: 'Invalid phone number in ADF payload' });
     }
 
+    // Check if a lead already exists for this phone (prevent duplicate SMS)
+    const existingLead = getSMSLeadByPhone(smsLead.phone);
+    if (existingLead) {
+      console.log(`⚠️  Lead already exists for ${smsLead.phone} — skipping duplicate SMS`);
+      return res.json({
+        success: true,
+        leadId: existingLead.id,
+        message: 'Existing SMS lead found (no duplicate SMS sent)',
+        customerPhone: existingLead.phone,
+        existing: true
+      });
+    }
+
     // Store SMS lead
     smsLeads.push(smsLead);
 
-    // Send initial SMS greeting
+    // Send initial SMS greeting — include a vehicle link if we have a match
     try {
+      let greetingBody = `Hi ${smsLead.name}! 👋 Thanks for your interest in ${smsLead.vehicleInterest || 'our vehicles'} at Carson Exports.`;
+
+      // Find a matching vehicle to include in the greeting
+      if (smsLead.vehicleInterest) {
+        const greetingMatch = searchInventory(smsLead.vehicleInterest, 1);
+        if (greetingMatch.length > 0) {
+          const v = greetingMatch[0];
+          const vehicleLink = wrapUrlsWithTracking(v.url, smsLead.phone);
+          greetingBody += `\n\n🚗 Check out our ${v.year} ${v.make} ${v.model} ${v.trim} — $${v.price.toLocaleString()}:\n${vehicleLink}`;
+        }
+      }
+
+      greetingBody += `\n\nWhat can we help with?\n1️⃣ Browse vehicles\n2️⃣ Book appointment\n3️⃣ Ask a question`;
+
       await twilioClient.messages.create({
-        body: `Hi ${smsLead.name}! 👋 Thanks for your interest in ${smsLead.vehicleInterest || 'our vehicles'}. What can we help with? 1) Browse vehicles 2) Book appointment 3) Ask a question`,
+        body: greetingBody,
         from: TWILIO_PHONE_NUMBER,
         to: smsLead.phone
       });
@@ -752,7 +942,7 @@ app.post('/api/sms-chat', async (req, res) => {
     // ======================
     // GENERATE SYSTEM PROMPT (NOW WITH NEW STATE)
     // ======================
-    const systemPrompt = generateSMSSystemPrompt({}, nextState, smsLead);
+    const systemPrompt = generateSMSSystemPrompt({}, nextState, smsLead, message);
 
     // ======================
     // CALL OPENAI API
@@ -765,7 +955,7 @@ app.post('/api/sms-chat', async (req, res) => {
         { role: 'user', content: message }
       ],
       temperature: 0.7,
-      max_tokens: 300,
+      max_tokens: 500,
       top_p: 0.9
     }, {
       headers: {
@@ -774,9 +964,12 @@ app.post('/api/sms-chat', async (req, res) => {
       }
     });
 
-    const aiResponse = response.data.choices[0].message.content;
+    const aiResponseRaw = response.data.choices[0].message.content;
 
-    // Log messages in transcript
+    // Wrap any URLs in tracking links so we can see what the lead clicks
+    const aiResponse = wrapUrlsWithTracking(aiResponseRaw, phone);
+
+    // Log messages in transcript (store the version with tracking links so admin sees same thing)
     smsLead.smsHistory.push(
       { role: 'user', content: message },
       { role: 'assistant', content: aiResponse }
@@ -852,37 +1045,43 @@ app.post('/api/sms-chat', async (req, res) => {
 
 /**
  * POST /api/webhook/sms-inbound
- * Receives SMS messages from Twilio webhook
- *
- * Request body: { From, Body, MessageSid, ... }
- * Response: { statusCode, body }
+ * Receives inbound SMS from Twilio webhook.
+ * Twilio sends form-encoded data: From, Body, MessageSid, etc.
+ * Must return valid TwiML (empty <Response/> since we send replies via API).
  */
 app.post('/api/webhook/sms-inbound', async (req, res) => {
   try {
-    const { From, Body } = req.body;
+    const From = req.body.From;
+    const Body = req.body.Body;
+
+    console.log(`📨 INBOUND SMS received — From: ${From}, Body: "${(Body || '').substring(0, 80)}"`);
+    console.log(`📨 Full req.body keys: ${Object.keys(req.body).join(', ')}`);
 
     if (!From || !Body) {
-      return res.status(400).json({ error: 'Invalid Twilio webhook payload' });
+      console.warn('⚠️  Missing From or Body in Twilio webhook payload');
+      res.set('Content-Type', 'text/xml');
+      return res.send('<Response></Response>');
     }
 
-    console.log(`📨 Inbound SMS from ${From}: ${Body.substring(0, 50)}...`);
-
-    // Process SMS through chat endpoint
+    // Process through the SMS chat engine (AI + state machine + sends reply via Twilio API)
     try {
-      await axios.post(`http://localhost:${PORT}/api/sms-chat`, {
+      const chatResult = await axios.post(`http://localhost:${PORT}/api/sms-chat`, {
         phone: From,
         message: Body
       });
+      console.log(`✅ Inbound SMS processed — AI replied (state: ${chatResult.data.leadState})`);
     } catch (chatError) {
-      console.error('SMS chat processing error:', chatError.message);
+      console.error('❌ SMS chat processing error:', chatError.response?.data || chatError.message);
     }
 
-    // Return 200 OK to Twilio immediately
-    res.json({ statusCode: 200, body: 'Message processed' });
+    // Return empty TwiML — we already sent the reply via Twilio Messages API in /api/sms-chat
+    res.set('Content-Type', 'text/xml');
+    res.send('<Response></Response>');
 
   } catch (error) {
     console.error('SMS Inbound Webhook Error:', error);
-    res.json({ statusCode: 200, body: 'Error logged' }); // Still return 200 to Twilio
+    res.set('Content-Type', 'text/xml');
+    res.send('<Response></Response>');
   }
 });
 
@@ -912,6 +1111,9 @@ app.get('/api/sms-lead-status/:phone', (req, res) => {
         status: smsLead.status,
         smsHistory: smsLead.smsHistory,
         appointmentData: smsLead.appointmentData,
+        clickHistory: smsLead.clickHistory || [],
+        interestScore: smsLead.interestScore || 0,
+        vehicleInterest: smsLead.vehicleInterest,
         createdAt: smsLead.createdAt,
         updatedAt: smsLead.updatedAt
       }
@@ -920,6 +1122,175 @@ app.get('/api/sms-lead-status/:phone', (req, res) => {
     console.error('SMS Lead Status Error:', error);
     res.status(500).json({ error: 'Failed to get SMS lead status' });
   }
+});
+
+/**
+ * GET /t/:trackingId
+ * Link tracking redirect — logs click against the lead and redirects to destination URL
+ * This URL is what gets sent in SMS messages when tunnel is active
+ */
+app.get('/t/:id', (req, res) => {
+  const link = trackingLinks[req.params.id];
+
+  if (!link) {
+    // Unknown tracking ID — redirect to homepage
+    return res.redirect('https://carsonexports.com');
+  }
+
+  link.clicks++;
+
+  // Find lead and record click event
+  const lead = getSMSLeadByPhone(link.leadPhone);
+  if (lead) {
+    lead.clickHistory = lead.clickHistory || [];
+    lead.clickHistory.push({
+      url: link.url,
+      label: link.label,
+      trackingId: req.params.id,
+      timestamp: new Date().toISOString(),
+      userAgent: req.headers['user-agent'] || '',
+      referrer: req.headers['referer'] || ''
+    });
+    lead.interestScore = (lead.interestScore || 0) + 1;
+    lead.updatedAt = new Date().toISOString();
+    console.log(`🖱️  Click tracked: "${link.label}" by ${link.leadPhone} (total score: ${lead.interestScore})`);
+  }
+
+  res.redirect(link.url);
+});
+
+/**
+ * Helper: Look up Twilio phone number SID and save current webhook URL
+ */
+async function getTwilioPhoneInfo() {
+  if (!twilioClient) return null;
+  try {
+    const numbers = await twilioClient.incomingPhoneNumbers.list({ phoneNumber: TWILIO_PHONE_NUMBER });
+    if (numbers.length > 0) {
+      twilioPhoneSid = numbers[0].sid;
+      originalTwilioWebhookUrl = numbers[0].smsUrl || '';
+      console.log(`📞 Twilio phone SID: ${twilioPhoneSid}`);
+      console.log(`📞 Current webhook: ${originalTwilioWebhookUrl || '(none)'}`);
+      return numbers[0];
+    }
+  } catch (err) {
+    console.error('Twilio phone lookup error:', err.message);
+  }
+  return null;
+}
+
+/**
+ * Helper: Update Twilio SMS webhook URL
+ */
+async function setTwilioWebhook(url) {
+  if (!twilioClient || !twilioPhoneSid) return false;
+  try {
+    await twilioClient.incomingPhoneNumbers(twilioPhoneSid).update({
+      smsUrl: url,
+      smsMethod: 'POST'
+    });
+    console.log(`✅ Twilio webhook updated to: ${url}`);
+    return true;
+  } catch (err) {
+    console.error('Twilio webhook update error:', err.message);
+    return false;
+  }
+}
+
+/**
+ * POST /api/start-tunnel
+ * Start a localtunnel and automatically configure Twilio to send inbound SMS here.
+ * Saves the original Twilio webhook URL so it can be restored when tunnel stops.
+ * Response: { success, url, webhookUrl, twilioConfigured }
+ */
+app.post('/api/start-tunnel', async (req, res) => {
+  try {
+    // Return existing tunnel if already running
+    if (activeTunnel) {
+      const webhookUrl = `${activeTunnel.url}/api/webhook/sms-inbound`;
+      return res.json({ success: true, url: activeTunnel.url, webhookUrl, existing: true, twilioConfigured: true });
+    }
+
+    console.log('🌐 Starting localtunnel...');
+    const tunnel = await localtunnel({ port: PORT });
+    activeTunnel = tunnel;
+
+    tunnel.on('close', () => {
+      console.log('🌐 Tunnel closed');
+      activeTunnel = null;
+    });
+
+    tunnel.on('error', (err) => {
+      console.error('🌐 Tunnel error:', err.message);
+      activeTunnel = null;
+    });
+
+    const webhookUrl = `${tunnel.url}/api/webhook/sms-inbound`;
+    console.log(`🌐 Tunnel started: ${tunnel.url}`);
+
+    // Auto-configure Twilio to point at this tunnel
+    let twilioConfigured = false;
+    await getTwilioPhoneInfo();
+    if (twilioPhoneSid) {
+      twilioConfigured = await setTwilioWebhook(webhookUrl);
+    }
+
+    res.json({ success: true, url: tunnel.url, webhookUrl, twilioConfigured });
+
+  } catch (err) {
+    console.error('Tunnel start error:', err);
+    res.status(500).json({ error: 'Failed to start tunnel: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/stop-tunnel
+ * Stop the active localtunnel and restore the original Twilio webhook URL
+ */
+app.post('/api/stop-tunnel', async (req, res) => {
+  try {
+    // Restore original Twilio webhook
+    if (originalTwilioWebhookUrl && twilioPhoneSid) {
+      await setTwilioWebhook(originalTwilioWebhookUrl);
+      console.log(`📞 Twilio webhook restored to: ${originalTwilioWebhookUrl}`);
+    }
+
+    if (activeTunnel) {
+      activeTunnel.close();
+      activeTunnel = null;
+      console.log('🌐 Tunnel stopped');
+    }
+
+    res.json({ success: true, message: 'Tunnel stopped, Twilio webhook restored' });
+  } catch (err) {
+    console.error('Stop tunnel error:', err.message);
+    res.json({ success: true, message: 'Tunnel stopped (webhook restore may have failed)' });
+  }
+});
+
+/**
+ * GET /api/tunnel-status
+ * Check if a tunnel is active and get its URL
+ */
+app.get('/api/tunnel-status', (req, res) => {
+  if (activeTunnel) {
+    res.json({ active: true, url: activeTunnel.url, webhookUrl: `${activeTunnel.url}/api/webhook/sms-inbound` });
+  } else {
+    res.json({ active: false, url: null, webhookUrl: null });
+  }
+});
+
+/**
+ * DELETE /api/sms-lead/:phone
+ * Reset (delete) an SMS lead by phone number — used to clear test leads
+ */
+app.delete('/api/sms-lead/:phone', (req, res) => {
+  const phone = req.params.phone.startsWith('+') ? req.params.phone : '+1' + req.params.phone.replace(/\D/g, '');
+  const beforeCount = smsLeads.length;
+  smsLeads = smsLeads.filter(lead => lead.phone !== phone);
+  const removed = beforeCount - smsLeads.length;
+  console.log(`🗑️  Removed ${removed} SMS lead(s) for ${phone}`);
+  res.json({ success: true, removed, message: removed > 0 ? `Cleared lead for ${phone}` : 'No lead found for that phone' });
 });
 
 // Start server
