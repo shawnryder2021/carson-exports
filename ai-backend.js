@@ -25,14 +25,118 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Load inventory data
-let inventory = [];
-try {
-  inventory = JSON.parse(fs.readFileSync(path.join(__dirname, 'inventory.json'), 'utf8'));
-  console.log(`📦 Loaded ${inventory.length} vehicles from inventory.json`);
-} catch (err) {
-  console.warn('⚠️  Could not load inventory.json:', err.message);
+// Google Sheets inventory source
+const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/1gNiaM_TTswU8WmuP7O3Vdu_qj2ow1ZaUpHXulP1YUoI/export?format=csv';
+const INVENTORY_REFRESH_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+// Admin settings — synced from frontend admin panel via /api/admin-settings
+let backendAdminSettings = {
+  dealershipName: 'Carson Exports',
+  phone: '1-833-706-3093',
+  address: '550 Windmill Road, Dartmouth, NS, B3B 1B3',
+  hours: 'Monday–Saturday, 9:00 AM – 8:00 PM (Closed Sundays)',
+  services: 'Sales, Service, Financing, Trade-ins',
+  brands: 'Toyota, Honda, Nissan, Hyundai, Ford, Volkswagen, Audi, BMW, and more',
+  appointmentRules: 'Appointments available Mon-Sat. Service appointments in 30-min slots from 8AM-5PM. Sales appointments from 9AM-7PM. No Sunday appointments.',
+  responseTone: 'friendly',
+  faqKnowledge: ''
+};
+
+/**
+ * Simple RFC 4180 CSV line parser that handles quoted fields with commas
+ */
+function parseCSVLine(line) {
+  const fields = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(field);
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  return fields;
 }
+
+/**
+ * Map a Google Sheets row (as object) to a vehicle object
+ */
+function mapSheetRowToVehicle(row) {
+  const price = parseFloat((row.Price || '0').replace(/[^0-9.]/g, '')) || 0;
+  const mileage = parseInt(row['mileage.value'] || '0') || 0;
+  const year = parseInt(row.year) || 0;
+  const make = (row.make || '').trim();
+  const fullModel = (row.model || '').trim();
+  // model column is "Honda Civic" — strip make prefix to get just "Civic"
+  const modelName = fullModel.startsWith(make + ' ') ? fullModel.slice(make.length + 1) : fullModel;
+  // trim is whatever follows "YEAR MAKE MODELNAME" in the title
+  const title = (row.title || '').trim();
+  const titlePrefix = `${year} ${make} ${modelName}`.trim();
+  const trim = title.startsWith(titlePrefix) ? title.slice(titlePrefix.length).trim() : '';
+
+  return {
+    id: row.vehicle_id || '',
+    year,
+    make,
+    model: modelName,
+    trim,
+    price,
+    mileage,
+    color: '',
+    features: [],
+    url: (row.Link || '').trim(),
+    bodyStyle: (row.body_style || '').trim(),
+    description: (row.Description || row.title || '').trim()
+  };
+}
+
+/**
+ * Fetch inventory from Google Sheets CSV export and update in-memory array
+ */
+async function fetchInventoryFromSheets() {
+  try {
+    console.log('📊 Fetching inventory from Google Sheets...');
+    const response = await axios.get(SHEETS_CSV_URL, { responseType: 'text', timeout: 15000 });
+    const lines = response.data.split('\n').filter(l => l.trim());
+    if (lines.length < 2) throw new Error('No data rows in sheet');
+
+    const headers = parseCSVLine(lines[0]).map(h => h.trim());
+    const vehicles = lines.slice(1)
+      .map(line => {
+        const values = parseCSVLine(line);
+        const row = {};
+        headers.forEach((h, i) => { row[h] = (values[i] || '').trim(); });
+        return row;
+      })
+      .filter(row => row.Link && row.Link.trim() && row.year && row.make) // only valid rows
+      .map(mapSheetRowToVehicle)
+      .filter(v => v.url && v.price > 0);
+
+    inventory = vehicles;
+    console.log(`✅ Inventory synced: ${inventory.length} vehicles from Google Sheets`);
+    return inventory;
+  } catch (err) {
+    console.warn('⚠️  Google Sheets fetch failed:', err.message);
+    // Fall back to local inventory.json
+    try {
+      inventory = JSON.parse(fs.readFileSync(path.join(__dirname, 'inventory.json'), 'utf8'));
+      console.log(`📦 Loaded ${inventory.length} vehicles from inventory.json (fallback)`);
+    } catch (localErr) {
+      console.warn('⚠️  Could not load inventory.json either:', localErr.message);
+    }
+    return inventory;
+  }
+}
+
+// Load inventory data (try Sheets first, fallback to JSON)
+let inventory = [];
+// Will be populated async after server starts — see bottom of file
 
 // Middleware
 app.use(cors());
@@ -281,21 +385,32 @@ Remember: This is a natural conversation between a helpful AI and a customer. Re
 }
 
 /**
- * Generate system prompt for SMS conversations
- * SMS-optimized: shorter messages, natural language, mobile-friendly
- * @param {Object} dealershipSettings - Dealership configuration
+ * Generate system prompt for SMS conversations.
+ * Uses backendAdminSettings (synced from frontend admin panel) so SMS follows
+ * the same rules as the web chat — same FAQ, tone, services, appointment rules.
  * @param {string} smsState - Current SMS state (ah_menu, ah_inventory, ah_appt_*, etc.)
  * @param {Object} leadData - SMS lead data for context
+ * @param {string} currentMessage - The current user message (for inventory search)
  * @returns {string} - SMS-optimized system prompt
  */
-function generateSMSSystemPrompt(dealershipSettings = {}, smsState = 'ah_menu', leadData = {}, currentMessage = '') {
+function generateSMSSystemPrompt(smsState = 'ah_menu', leadData = {}, currentMessage = '') {
+  // Use admin settings stored server-side (same as web chat)
   const settings = {
-    dealershipName: dealershipSettings.dealershipName || 'Carson Exports',
-    phone: dealershipSettings.phone || '1-833-706-3093',
-    address: dealershipSettings.address || '550 Windmill Road, Dartmouth, NS',
-    hours: dealershipSettings.hours || 'Mon-Sat 9AM-8PM',
-    brands: dealershipSettings.brands || 'Toyota, Honda, Nissan, Hyundai, Ford, Audi, BMW'
+    dealershipName: backendAdminSettings.dealershipName || 'Carson Exports',
+    phone: backendAdminSettings.phone || '1-833-706-3093',
+    address: backendAdminSettings.address || '550 Windmill Road, Dartmouth, NS, B3B 1B3',
+    hours: backendAdminSettings.hours || 'Monday–Saturday, 9:00 AM – 8:00 PM (Closed Sundays)',
+    services: backendAdminSettings.services || 'Sales, Service, Financing, Trade-ins',
+    brands: backendAdminSettings.brands || 'Toyota, Honda, Nissan, Hyundai, Ford, and more',
+    appointmentRules: backendAdminSettings.appointmentRules || 'Appointments available Mon-Sat',
+    responseTone: backendAdminSettings.responseTone || 'friendly',
+    faqKnowledge: backendAdminSettings.faqKnowledge || ''
   };
+
+  // Same tone logic as web chat
+  let toneInstruction = 'Use a friendly, professional tone that feels natural and approachable.';
+  if (settings.responseTone === 'formal') toneInstruction = 'Maintain a formal, professional tone at all times.';
+  else if (settings.responseTone === 'casual') toneInstruction = 'Use a casual, conversational, friendly tone. Be relaxed and personable.';
 
   let stateGuidance = '';
 
@@ -428,31 +543,48 @@ Want to book a test drive for either one?`;
       stateGuidance = `Current SMS state: ${smsState}`;
   }
 
-  return `You are an AI assistant for ${settings.dealershipName}, a pre-owned vehicle dealership. You're having an SMS conversation with a customer after-hours.
+  // Build FAQ knowledge block (same as web chat)
+  const faqBlock = settings.faqKnowledge
+    ? `\nFAQ KNOWLEDGE BASE:\n${settings.faqKnowledge}\n`
+    : '';
 
-DEALERSHIP INFO:
+  return `You are an AI assistant for ${settings.dealershipName}, a pre-owned and exotic vehicle dealership. You're having an SMS text conversation with a customer.
+
+DEALERSHIP INFORMATION:
 - Name: ${settings.dealershipName}
 - Hours: ${settings.hours}
 - Phone: ${settings.phone}
 - Location: ${settings.address}
-- Brands: ${settings.brands}
-
+- Services: ${settings.services}
+- Brands carried: ${settings.brands}
+- Appointment policy: ${settings.appointmentRules}
+${faqBlock}
 CUSTOMER INFO:
 - Name: ${leadData.name || 'Customer'}
-- Phone: ${leadData.phone || 'Not yet collected'}
-- Interest: ${leadData.vehicleInterest || 'General inquiry'}
+- Inquiry interest: ${leadData.vehicleInterest || 'General inquiry'}
 
-SMS CONVERSATION RULES:
-- Keep messages SHORT (under 160 characters when possible)
-- Use simple language, NO jargon
-- Be friendly and helpful
-- Ask one question at a time
-- Use emojis sparingly (🚗 👍 ✅ are OK)
+YOUR CORE RESPONSIBILITIES (same as web chat):
+1. Help customers find vehicles matching their needs
+2. Answer questions about dealership info, hours, location, financing, trade-ins accurately
+3. Guide customers toward test drive or service appointments
+4. Collect appointment information naturally through conversation
+5. Be knowledgeable and helpful about all dealership services
+
+TONE: ${toneInstruction}
+
+CRITICAL SMS RULES (text message format):
+- Keep each message SHORT — 2-4 sentences max, under 300 characters when possible
+- Ask only ONE question at a time — never pile on multiple asks
+- Use simple direct language, no jargon
+- Use emojis sparingly (🚗 ✅ 👍 are fine, don't overdo it)
+- This is a text conversation, not an email — be brief and direct
+- When sharing vehicles, list them clearly with price and the link on its own line
+- NEVER say "Would you like to see options?" — just show them immediately
 
 STATE-AWARE BEHAVIOR:
 ${stateGuidance}
 
-Remember: You're texting, not emailing. Keep it brief, natural, and friendly.`;
+Remember: Same knowledge as the web chat, just delivered concisely via text message.`;
 }
 
 /**
@@ -471,7 +603,7 @@ function searchInventory(query, limit = 4) {
   // Score each vehicle
   const scored = inventory.map(v => {
     const haystack = [
-      v.make, v.model, v.trim, v.color, String(v.year), String(v.price),
+      v.make, v.model, v.trim, v.color, v.bodyStyle, String(v.year), String(v.price),
       ...(v.features || [])
     ].join(' ').toLowerCase();
 
@@ -498,9 +630,16 @@ function searchInventory(query, limit = 4) {
 
 /**
  * Format a vehicle for inclusion in an SMS system prompt
+ * Works with both inventory.json format (has color/features) and Sheets format (has bodyStyle/description)
  */
 function formatVehicleForPrompt(v) {
-  return `• ${v.year} ${v.make} ${v.model} ${v.trim} — $${v.price.toLocaleString()}, ${(v.mileage / 1000).toFixed(0)}k km, ${v.color}\n  Features: ${v.features.slice(0, 3).join(', ')}\n  Link: ${v.url}`;
+  const name = [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ');
+  const km = v.mileage ? `${Math.round(v.mileage / 1000)}k km` : '';
+  const details = [v.color, km].filter(Boolean).join(', ');
+  const featureStr = v.features && v.features.length > 0
+    ? `\n  Features: ${v.features.slice(0, 3).join(', ')}`
+    : v.bodyStyle ? `\n  Type: ${v.bodyStyle}` : '';
+  return `• ${name} — $${v.price.toLocaleString()}${details ? ', ' + details : ''}${featureStr}\n  Link: ${v.url}`;
 }
 
 /**
@@ -735,8 +874,41 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    twilio: twilioClient ? 'enabled' : 'disabled'
+    twilio: twilioClient ? 'enabled' : 'disabled',
+    inventory: inventory.length
   });
+});
+
+/**
+ * GET /api/admin-settings
+ * Returns current backend admin settings (used by SMS system)
+ */
+app.get('/api/admin-settings', (req, res) => {
+  res.json(backendAdminSettings);
+});
+
+/**
+ * POST /api/admin-settings
+ * Stores admin settings from the frontend so SMS chat uses the same rules as web chat.
+ * Called automatically when admin saves settings in the dashboard.
+ */
+app.post('/api/admin-settings', (req, res) => {
+  const allowed = ['dealershipName', 'phone', 'address', 'hours', 'services', 'brands', 'appointmentRules', 'responseTone', 'faqKnowledge'];
+  allowed.forEach(key => {
+    if (req.body[key] !== undefined) backendAdminSettings[key] = req.body[key];
+  });
+  console.log('⚙️  Admin settings updated:', Object.keys(req.body).filter(k => allowed.includes(k)).join(', '));
+  res.json({ success: true, settings: backendAdminSettings });
+});
+
+/**
+ * POST /api/sync-inventory
+ * Manually trigger a sync from Google Sheets.
+ * Also called automatically every 4 hours.
+ */
+app.post('/api/sync-inventory', async (req, res) => {
+  const vehicles = await fetchInventoryFromSheets();
+  res.json({ success: true, count: vehicles.length, message: `Synced ${vehicles.length} vehicles from Google Sheets` });
 });
 
 /**
@@ -942,7 +1114,7 @@ app.post('/api/sms-chat', async (req, res) => {
     // ======================
     // GENERATE SYSTEM PROMPT (NOW WITH NEW STATE)
     // ======================
-    const systemPrompt = generateSMSSystemPrompt({}, nextState, smsLead, message);
+    const systemPrompt = generateSMSSystemPrompt(nextState, smsLead, message);
 
     // ======================
     // CALL OPENAI API
@@ -1294,8 +1466,15 @@ app.delete('/api/sms-lead/:phone', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚗 Carson Exports AI Backend running on http://localhost:${PORT}`);
   console.log(`📝 Chat endpoint: POST http://localhost:${PORT}/api/chat`);
   console.log(`✅ Health check: GET http://localhost:${PORT}/api/health`);
+
+  // Fetch live inventory from Google Sheets on startup
+  await fetchInventoryFromSheets();
+
+  // Schedule periodic refresh every 4 hours
+  setInterval(fetchInventoryFromSheets, INVENTORY_REFRESH_MS);
+  console.log(`🔄 Inventory auto-refresh scheduled every ${INVENTORY_REFRESH_MS / 3600000}h`);
 });

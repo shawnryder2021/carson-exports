@@ -2142,6 +2142,9 @@ function saveSettings(){
   };
   localStorage.setItem('dealershipSettings', JSON.stringify(settings));
 
+  // Push to backend so SMS chat uses the same settings
+  pushSettingsToBackend();
+
   // Update logo with dealership name
   document.getElementById('siteLogoText').innerHTML=document.getElementById('settingName').value+'<span>Quality Pre-Owned & Exotic Vehicles</span>';
   showToast('Settings saved!');
@@ -2158,7 +2161,28 @@ function saveAISettings(){
     faqKnowledge: document.getElementById('aiFAQ').value
   };
   localStorage.setItem('aiSettings', JSON.stringify(aiSettings));
+
+  // Push to backend so SMS chat uses same AI rules
+  pushSettingsToBackend();
+
   showToast('AI Knowledge settings saved!');
+}
+
+/**
+ * Push combined admin settings to backend so SMS chat follows the same rules as web chat.
+ * Called automatically whenever settings are saved.
+ */
+async function pushSettingsToBackend(){
+  try {
+    const combined = getDealershipSettings();
+    await fetch('http://localhost:3001/api/admin-settings', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(combined)
+    });
+  } catch(e) {
+    // Backend may not be running — silently ignore
+  }
 }
 function showToast(msg){const t=document.createElement('div');t.style.cssText='position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:var(--success);color:#fff;padding:.6rem 1.25rem;border-radius:2rem;font-size:.85rem;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2);animation:msgFade .3s ease';t.innerHTML='<i class="fas fa-check-circle"></i> '+msg;document.body.appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300)},2500)}
 function copyEmbed(){navigator.clipboard.writeText(document.getElementById('embedCode').textContent).then(()=>showToast('Embed code copied!'))}
@@ -2176,6 +2200,9 @@ setTimeout(()=>{if(!chatOpen)document.getElementById('chatBadge').style.display=
 
 // Initialize AI integration if available
 setTimeout(async()=>{if(typeof aiChat!=='undefined'){const isHealthy=await aiChat.checkHealth();if(isHealthy){console.log('✅ AI Backend Connected - Smart vehicle presentations enabled');aiChat.setBackendURL('http://localhost:3001/api/chat')}else{console.warn('⚠️ AI Backend not responding - Using standard vehicle info');console.log('Start backend with: cd "Carson Exports Chat" && npm start')}}},1000);
+
+// Push current admin settings to backend on load so SMS chat is always in sync
+setTimeout(()=>pushSettingsToBackend(),2000);
 </script>
 <script src="ai-integration.js"></script>
 </body>
