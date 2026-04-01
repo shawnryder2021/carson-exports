@@ -352,6 +352,7 @@ tr:hover td{background:var(--accent-glow)}
       <div class="admin-sidebar-title">Dashboard</div>
       <div class="admin-sidebar-item active" onclick="switchAdminSection('overview',this)"><i class="fas fa-chart-line"></i> Overview</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('leads',this)"><i class="fas fa-users"></i> Lead History</div>
+      <div class="admin-sidebar-item" onclick="switchAdminSection('sms-messaging',this)"><i class="fas fa-comments"></i> 💬 SMS Messaging</div>
       <div class="admin-sidebar-title">Configuration</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('settings',this)"><i class="fas fa-building"></i> Dealership Settings</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('ai-knowledge',this)"><i class="fas fa-brain"></i> AI Knowledge</div>
@@ -407,7 +408,67 @@ tr:hover td{background:var(--accent-glow)}
           <button class="filter-btn" onclick="filterLeads('Sales',this)">Sales</button>
         </div>
         <div class="card">
-          <div class="card-body"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Source</th><th>Department</th><th>Appt Status</th><th>Date</th><th>Webhook</th><th>Actions</th></tr></thead><tbody id="leadsTableBody"></tbody></table></div></div>
+          <div class="card-body"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Source</th><th>Department</th><th>Score</th><th>Appt Status</th><th>Escalation</th><th>Date</th><th>Webhook</th><th>Actions</th></tr></thead><tbody id="leadsTableBody"></tbody></table></div></div>
+        </div>
+      </div>
+
+      <!-- SMS MESSAGING (Phase 1) -->
+      <div class="admin-section" id="section-sms-messaging" style="display: none;">
+        <h1 class="admin-page-title">💬 SMS Messaging</h1>
+        <p class="admin-page-desc">Send direct messages to customers and view conversations</p>
+
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-body">
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Search for a customer:</label>
+            <input
+              type="text"
+              id="sms-lead-search"
+              placeholder="Search by phone number or name... e.g., +1902555, John"
+              style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem;"
+            >
+            <div id="sms-search-results" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); display: none; background: var(--card-alt);">
+              <!-- Results populated here -->
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="sms-messaging-card" style="display: none;">
+          <div class="card-body">
+            <!-- Lead Status Bar -->
+            <div id="sms-status" style="margin-bottom: 15px; padding: 12px; background: var(--card-alt); border-radius: var(--radius-sm); border-left: 4px solid var(--accent); font-weight: 500;">
+              Select a customer to view their conversation
+            </div>
+
+            <!-- Conversation Thread -->
+            <div id="sms-thread" style="border: 1px solid var(--border); border-radius: var(--radius-sm); height: 400px; overflow-y: auto; padding: 15px; margin-bottom: 15px; background: var(--card-alt); font-size: 0.9rem;">
+              <!-- Messages rendered here -->
+            </div>
+
+            <!-- Message Composer -->
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <textarea
+                id="sms-message-input"
+                placeholder="Type your message to send via SMS... (max 1600 characters)"
+                style="width: 100%; height: 80px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: inherit; font-size: 0.9rem; resize: none;"
+              ></textarea>
+              <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button
+                  id="sms-clear-btn"
+                  onclick="clearSMSComposer()"
+                  style="background: var(--text-muted); color: #fff; padding: 10px 16px; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; transition: all 0.2s;"
+                >
+                  Clear
+                </button>
+                <button
+                  id="sms-send-btn"
+                  onclick="sendAdminSMS()"
+                  style="background: var(--success); color: #fff; padding: 10px 16px; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 500; transition: all 0.2s;"
+                >
+                  📱 Send Message
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1375,13 +1436,17 @@ function renderLeadsTable(tbodyId, data, full) {
     const statusBadge = l.date ? '<span class="badge-pill badge-green">Booked</span>' : '<span class="badge-pill badge-yellow">Lead Only</span>';
     const date = l.submittedAt ? new Date(l.submittedAt).toLocaleDateString() : 'N/A';
     if (full) {
+      const scoreBadge = `<span style="background: ${getScoreColor(l.interestScore || 0)}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">${l.interestScore || 0}</span>`;
+      const escalationBadge = l.needsEscalation ? '<span class="badge-pill badge-red">🚨 Escalated</span>' : '<span class="badge-pill badge-gray">—</span>';
       return `<tr>
         <td><strong>${escapeHtml(l.name || 'N/A')}</strong></td>
         <td>${escapeHtml(l.email || 'N/A')}</td>
         <td>${escapeHtml(l.phone || 'N/A')}</td>
         <td><span class="badge-pill badge-gray">${escapeHtml(l.source || 'Chat')}</span></td>
         <td>${deptBadge}</td>
+        <td>${scoreBadge}</td>
         <td>${statusBadge}</td>
+        <td>${escalationBadge}</td>
         <td>${date}</td>
         <td>${whBadge}</td>
         <td><button class="btn btn-sm btn-outline" onclick="showADFPreview()"><i class="fas fa-envelope"></i></button></td>
@@ -1521,6 +1586,163 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
 });
+
+// =====================================================
+// SMS MESSAGING FUNCTIONS (Phase 1)
+// =====================================================
+
+let selectedSMSLeadPhone = null;
+
+// Search for leads
+document.getElementById('sms-lead-search').addEventListener('input', async (e) => {
+  const query = e.target.value.trim().toLowerCase();
+  if (query.length < 1) {
+    document.getElementById('sms-search-results').innerHTML = '';
+    document.getElementById('sms-search-results').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('sms-search-results').style.display = 'block';
+
+  // Filter allLeads by phone or name
+  const results = (window.allLeads || []).filter(l => {
+    const phone = (l.phone || '').toLowerCase();
+    const name = (l.name || '').toLowerCase();
+    return phone.includes(query) || name.includes(query);
+  });
+
+  if (results.length === 0) {
+    document.getElementById('sms-search-results').innerHTML = '<div style="padding: 12px; color: var(--text-muted);">No leads found</div>';
+    return;
+  }
+
+  const html = results.map(lead => `
+    <div onclick="selectSMSLead('${lead.phone}')"
+         style="padding: 12px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; hover: {background: var(--border)};">
+      <div>
+        <strong>${lead.name || 'Unknown'}</strong><br>
+        <small style="color: var(--text-muted);">${lead.phone} • ${lead.status || 'pending'}</small>
+      </div>
+      <span style="background: ${getScoreColor(lead.interestScore || 0)}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">
+        ${lead.interestScore || 0}
+      </span>
+    </div>
+  `).join('');
+
+  document.getElementById('sms-search-results').innerHTML = html;
+});
+
+// Select lead and load conversation
+async function selectSMSLead(phone) {
+  selectedSMSLeadPhone = phone;
+  document.getElementById('sms-search-results').innerHTML = '';
+  document.getElementById('sms-search-results').style.display = 'none';
+  document.getElementById('sms-lead-search').value = phone;
+
+  // Fetch lead details
+  try {
+    const response = await fetch(`/api/sms-lead-status/${phone}`);
+    const data = await response.json();
+
+    if (!data.success) {
+      alert('Lead not found');
+      return;
+    }
+
+    const lead = data.lead;
+    document.getElementById('sms-messaging-card').style.display = 'block';
+
+    // Render conversation thread
+    const threadHTML = (lead.smsHistory || []).map(msg => {
+      const isAdmin = msg.role === 'admin';
+      const isUser = msg.role === 'user';
+      const isAssistant = msg.role === 'assistant';
+
+      return `
+        <div style="margin-bottom: 12px; padding: 10px; border-radius: 6px; background: ${isAdmin ? '#dcfce7' : isUser ? '#f3f4f6' : '#fef3c7'}; border-left: 4px solid ${isAdmin ? '#22c55e' : isUser ? '#9ca3af' : '#f59e0b'};">
+          <strong style="font-size: 0.8rem; color: #666;">
+            ${isAdmin ? '👨‍💼 You (Admin)' : isUser ? '👤 Customer' : '🤖 AI Assistant'}
+          </strong>
+          <div style="margin-top: 6px; word-wrap: break-word; font-size: 0.9rem; line-height: 1.4;">${msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('sms-thread').innerHTML = threadHTML || '<div style="color: var(--text-muted); text-align: center; padding: 20px;">No messages yet</div>';
+
+    // Update status bar
+    const escalationBadge = lead.needsEscalation ? ' • <span style="color: #ef4444; font-weight: bold;">🚨 ESCALATION REQUESTED</span>' : '';
+    document.getElementById('sms-status').innerHTML = `
+      <strong>${lead.name}</strong> • ${lead.phone} • Status: <strong>${lead.status}</strong> • Score: <span style="background: ${getScoreColor(lead.interestScore || 0)}; color: white; padding: 2px 6px; border-radius: 3px;">${lead.interestScore || 0}</span>${escalationBadge}
+    `;
+
+    // Scroll to bottom
+    document.getElementById('sms-thread').scrollTop = document.getElementById('sms-thread').scrollHeight;
+  } catch (error) {
+    alert('Error loading lead: ' + error.message);
+  }
+}
+
+// Send admin message
+async function sendAdminSMS() {
+  if (!selectedSMSLeadPhone) {
+    alert('Please select a lead first');
+    return;
+  }
+
+  const message = document.getElementById('sms-message-input').value.trim();
+  if (!message) {
+    alert('Please type a message');
+    return;
+  }
+
+  if (message.length > 1600) {
+    alert('Message is too long (max 1600 characters)');
+    return;
+  }
+
+  const btn = document.getElementById('sms-send-btn');
+  btn.disabled = true;
+  btn.textContent = '📱 Sending...';
+
+  try {
+    const response = await fetch('/api/admin/send-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: selectedSMSLeadPhone,
+        message: message
+      })
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      document.getElementById('sms-message-input').value = '';
+      alert('✅ Message sent! Customer will receive it via SMS');
+      // Reload conversation thread
+      selectSMSLead(selectedSMSLeadPhone);
+    } else {
+      alert('❌ Error: ' + (data.error || 'Failed to send'));
+    }
+  } catch (error) {
+    alert('❌ Network error: ' + error.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📱 Send Message';
+  }
+}
+
+function clearSMSComposer() {
+  document.getElementById('sms-message-input').value = '';
+  document.getElementById('sms-message-input').focus();
+}
+
+function getScoreColor(score) {
+  if (score >= 40) return '#22c55e';  // Green - hot lead
+  if (score >= 25) return '#f59e0b';  // Yellow - warm lead
+  if (score >= 10) return '#3b82f6';  // Blue - moderate
+  return '#64748b';  // Gray - cold
+}
 
 // =====================================================
 // INITIALIZE

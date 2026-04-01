@@ -18,6 +18,7 @@ const cors = require('cors');
 const axios = require('axios');
 const twilio = require('twilio');
 const localtunnel = require('localtunnel');
+const rateLimit = require('express-rate-limit');
 
 const path = require('path');
 const fs = require('fs');
@@ -142,6 +143,29 @@ let inventory = [];
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Twilio sends form-encoded webhooks
+
+// Rate Limiters (Phase 1)
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  max: 30,               // 30 requests per minute
+  message: 'Too many chat requests. Please wait before trying again.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const smsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,               // 10 SMS per minute (safer, Twilio is expensive)
+  message: 'Too many SMS requests. Please wait before trying again.',
+  standardHeaders: true,
+});
+
+const adfLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,                // 5 ADF leads per minute
+  message: 'Too many lead submissions. Please wait.',
+  standardHeaders: true,
+});
 
 // OpenAI API Configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -539,6 +563,17 @@ Want to book a test drive for either one?`;
       break;
     }
 
+    case 'ah_escalate': {
+      // Customer wants to speak with a dealer (Phase 1)
+      stateGuidance = `CURRENT STATE: Customer escalation request 🚨
+- Customer wants to speak to a dealer/representative
+- Be empathetic: "I understand. Let me get someone from our team to help you right away."
+- Confirm: "A member of our team will reach out shortly."
+- Don't try to solve further in AI mode
+- The sales team will contact them directly within a few hours`;
+      break;
+    }
+
     default:
       stateGuidance = `Current SMS state: ${smsState}`;
   }
@@ -766,6 +801,52 @@ function extractTime(message) {
 }
 
 /**
+ * Calculate dynamic lead interest score (Phase 1)
+ * Multi-factor scoring: engagement, price signals, urgency, appointment completion, escalation, recency
+ * Score returned dynamically (not stored)
+ */
+function calculateLeadScore(lead) {
+  if (!lead) return 0;
+  let score = 0;
+
+  // Base: engagement via message count
+  score += (lead.smsHistory?.length || 0) * 0.5;
+
+  // Clicks (existing tracking)
+  score += (lead.clickHistory?.length || 0) * 1;
+
+  // Appointment completion (high-intent signals)
+  if (lead.status === 'booked') score += 10;
+  if (lead.status === 'submitted') score += 15;
+
+  // Price/budget mentions in conversation
+  const conversation = (lead.smsHistory || [])
+    .map(m => m.content)
+    .join(' ')
+    .toLowerCase();
+
+  if (conversation.match(/\$?\d+k|\d+,\d{3}|budget|under|price/i)) score += 5;
+
+  // Urgency signals (time-sensitive interest)
+  if (conversation.match(/tomorrow|today|this week|asap|urgent|when|soon|right away|immediately/i)) {
+    score += 3;
+  }
+
+  // Escalation request (customer wants human interaction)
+  if (lead.needsEscalation || lead.escalationRequested) score += 8;
+
+  // Recency bonus (recent engagement is more valuable)
+  if (lead.updatedAt || lead.createdAt) {
+    const lastUpdate = new Date(lead.updatedAt || lead.createdAt);
+    const hoursSince = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+    if (hoursSince < 2) score += 3;      // Very recent = +3
+    else if (hoursSince < 24) score += 2; // Today = +2
+  }
+
+  return Math.round(score);
+}
+
+/**
  * POST /api/chat
  *
  * Request body:
@@ -784,7 +865,7 @@ function extractTime(message) {
  *   "response": "AI-generated response text"
  * }
  */
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', chatLimiter, async (req, res) => {
   try {
     const {
       messages = [],
@@ -925,7 +1006,7 @@ app.use(express.static(__dirname));
  * Request body: { customer_name, customer_phone, customer_email, vehicle_interest, department }
  * Response: { success: true, leadId, message, customerPhone }
  */
-app.post('/api/webhook/adf', async (req, res) => {
+app.post('/api/webhook/adf', adfLimiter, async (req, res) => {
   try {
     if (!twilioClient) {
       return res.status(503).json({ error: 'Twilio not configured. SMS features disabled.' });
@@ -1008,7 +1089,7 @@ app.post('/api/webhook/adf', async (req, res) => {
  * Request body: { phone, message }
  * Response: { success: true, response, leadState }
  */
-app.post('/api/sms-chat', async (req, res) => {
+app.post('/api/sms-chat', smsLimiter, async (req, res) => {
   try {
     if (!twilioClient) {
       return res.status(503).json({ error: 'Twilio not configured' });
@@ -1056,7 +1137,11 @@ app.post('/api/sms-chat', async (req, res) => {
       case 'ah_menu': {
         // User responding to menu - determine intent from natural language or numbered option
         const menuLower = message.toLowerCase();
-        if (menuLower.includes('2') || menuLower.includes('appointment') || menuLower.includes('book') || menuLower.includes('schedule') || menuLower.includes('test drive') || menuLower.includes('visit') || menuLower.includes('come in')) {
+
+        // Check for escalation first (Phase 1)
+        if (menuLower.match(/escalate|speak.*dealer|talk.*agent|human|person|real person|representative/)) {
+          nextState = 'ah_escalate';
+        } else if (menuLower.includes('2') || menuLower.includes('appointment') || menuLower.includes('book') || menuLower.includes('schedule') || menuLower.includes('test drive') || menuLower.includes('visit') || menuLower.includes('come in')) {
           nextState = 'ah_appt_name';
         } else if (menuLower.includes('3') || menuLower.includes('question') || menuLower.includes('info') || menuLower.includes('tell') || menuLower.includes('help') || menuLower.includes('hours') || menuLower.includes('location') || menuLower.includes('financing') || menuLower.includes('trade')) {
           nextState = 'ah_freeform';
@@ -1138,7 +1223,11 @@ app.post('/api/sms-chat', async (req, res) => {
       case 'ah_freeform': {
         // Allow pivot from freeform to booking or inventory
         const freeformLower = message.toLowerCase();
-        if (freeformLower.includes('book') || freeformLower.includes('appointment') || freeformLower.includes('schedule') || freeformLower.includes('test drive') || freeformLower.includes('visit')) {
+
+        // Check for escalation (Phase 1)
+        if (freeformLower.match(/escalate|speak.*dealer|talk.*agent|human|person|real person|representative/)) {
+          nextState = 'ah_escalate';
+        } else if (freeformLower.includes('book') || freeformLower.includes('appointment') || freeformLower.includes('schedule') || freeformLower.includes('test drive') || freeformLower.includes('visit')) {
           nextState = 'ah_appt_name';
           console.log(`📱 SMS freeform → appointment booking`);
         } else if (freeformLower.includes('vehicle') || freeformLower.includes('car') || freeformLower.includes('truck') || freeformLower.includes('suv') || freeformLower.includes('browse') || freeformLower.includes('show me') || freeformLower.includes('looking')) {
@@ -1158,6 +1247,14 @@ app.post('/api/sms-chat', async (req, res) => {
         } else {
           nextState = 'ah_freeform';
         }
+        break;
+      }
+
+      case 'ah_escalate': {
+        // Customer requested escalation to speak with dealer (Phase 1)
+        smsLead.needsEscalation = true;
+        smsLead.escalationRequestedAt = new Date().toISOString();
+        console.log(`🚨 Escalation requested by ${smsLead.phone} (${smsLead.name})`);
         break;
       }
     }
@@ -1222,7 +1319,10 @@ app.post('/api/sms-chat', async (req, res) => {
         source: smsLead.source,
         sms_lead_id: smsLead.id,
         sms_message_count: smsLead.smsHistory.length,
-        created_at: smsLead.createdAt
+        created_at: smsLead.createdAt,
+        escalation_requested: smsLead.needsEscalation || false,
+        escalation_requested_at: smsLead.escalationRequestedAt || null,
+        interest_score: calculateLeadScore(smsLead)
       };
 
       // Send to webhook (try environment variable first)
@@ -1328,6 +1428,9 @@ app.get('/api/sms-lead-status/:phone', (req, res) => {
       return res.json({ success: false, error: 'SMS lead not found' });
     }
 
+    // Calculate score dynamically (Phase 1)
+    const currentScore = calculateLeadScore(smsLead);
+
     res.json({
       success: true,
       lead: {
@@ -1339,15 +1442,77 @@ app.get('/api/sms-lead-status/:phone', (req, res) => {
         smsHistory: smsLead.smsHistory,
         appointmentData: smsLead.appointmentData,
         clickHistory: smsLead.clickHistory || [],
-        interestScore: smsLead.interestScore || 0,
+        interestScore: currentScore,
         vehicleInterest: smsLead.vehicleInterest,
         createdAt: smsLead.createdAt,
-        updatedAt: smsLead.updatedAt
+        updatedAt: smsLead.updatedAt,
+        needsEscalation: smsLead.needsEscalation || false
       }
     });
   } catch (error) {
     console.error('SMS Lead Status Error:', error);
     res.status(500).json({ error: 'Failed to get SMS lead status' });
+  }
+});
+
+/**
+ * POST /api/admin/send-message (Phase 1)
+ * Admin sends a manual SMS message to a customer
+ * Request body: { phone: "+19025551234", message: "Hi John..." }
+ * Response: { success: true, messageSid: "SM..." }
+ */
+app.post('/api/admin/send-message', async (req, res) => {
+  try {
+    if (!twilioClient) {
+      return res.status(503).json({ error: 'Twilio not configured' });
+    }
+
+    const { phone, message } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'Missing phone or message' });
+    }
+
+    if (message.trim().length === 0 || message.length > 1600) {
+      return res.status(400).json({ error: 'Message must be 1-1600 characters' });
+    }
+
+    // Find the SMS lead
+    const smsLead = getSMSLeadByPhone(phone);
+    if (!smsLead) {
+      return res.status(404).json({ error: 'SMS lead not found' });
+    }
+
+    // Wrap URLs with tracking
+    const messageWithTracking = wrapUrlsWithTracking(message, phone);
+
+    // Send via Twilio
+    const twilioResponse = await twilioClient.messages.create({
+      body: messageWithTracking,
+      from: TWILIO_PHONE_NUMBER,
+      to: phone
+    });
+
+    // Log message to conversation history with admin marker
+    smsLead.smsHistory.push({
+      role: 'admin',
+      content: messageWithTracking,
+      sentAt: new Date().toISOString()
+    });
+
+    smsLead.updatedAt = new Date().toISOString();
+
+    console.log(`👨‍💼 Admin message sent to ${phone} (${smsLead.name})`);
+
+    res.json({
+      success: true,
+      messageSid: twilioResponse.sid,
+      sentAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Admin Send Message Error:', error);
+    res.status(500).json({ error: 'Failed to send message: ' + error.message });
   }
 });
 
