@@ -18,6 +18,7 @@
   "author": "Carson Exports",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.101.1",
     "axios": "^1.6.5",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

@@ -119,6 +119,19 @@ input,select,textarea{font-family:inherit;font-size:.875rem}
 .chat-msg.user .chat-msg-bubble{background:var(--chat-user);color:#fff;border-bottom-right-radius:4px}
 .chat-msg-time{font-size:.65rem;color:var(--text-muted);padding:0 .25rem}
 .chat-msg.user .chat-msg-time{text-align:right}
+.chat-vehicle-card{background:#fff;border-radius:10px;overflow:hidden;margin-top:.5rem;border:1px solid rgba(0,0,0,.1);box-shadow:0 2px 8px rgba(0,0,0,.1);min-width:200px}
+.chat-vehicle-card+.chat-vehicle-card{margin-top:.5rem}
+.chat-vehicle-card-img{width:100%;height:140px;object-fit:cover;display:block;background:linear-gradient(135deg,#1a3a6b,#0d2137)}
+.chat-vehicle-card-body{padding:.7rem}
+.chat-vehicle-card-title{font-weight:700;font-size:.82rem;color:#1a1a2e;margin-bottom:.25rem;line-height:1.3}
+.chat-vehicle-card-meta{font-size:.7rem;color:#666;margin-bottom:.4rem;display:flex;gap:.6rem;flex-wrap:wrap}
+.chat-vehicle-card-price{font-size:.95rem;font-weight:800;color:var(--accent);margin-bottom:.55rem}
+.chat-vehicle-card-actions{display:flex;gap:.35rem}
+.cvca{flex:1;padding:.35rem .4rem;border-radius:6px;font-size:.72rem;font-weight:600;cursor:pointer;border:none;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:.25rem}
+.cvca-primary{background:var(--accent);color:#fff}
+.cvca-primary:hover{background:#1555d4;color:#fff}
+.cvca-outline{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.cvca-outline:hover{background:var(--accent);color:#fff}
 
 .chat-quick-replies{display:flex;flex-wrap:wrap;gap:.4rem;padding:0 1rem .75rem}
 .chat-qr{background:var(--accent-glow);color:var(--accent);border:1.5px solid var(--accent);padding:.4rem .85rem;border-radius:2rem;font-size:.78rem;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap}
@@ -1063,7 +1076,7 @@ function openChatAboutVehicle(vin) {
       chatState = 'menu';
       addUserMessage(`I'm interested in the ${v.title}`);
       showTyping(() => {
-        addBotMessage(`Great choice! The <strong>${v.title}</strong> is an excellent vehicle. Here are the highlights:\n\n• <strong>Price:</strong> $${v.price.toLocaleString()} CAD\n• <strong>Mileage:</strong> ${v.mileage.toLocaleString()} km\n• <strong>Type:</strong> ${v.bodyStyle}\n${v.description !== 'Stock' ? '• <strong>Features:</strong> ' + v.description : ''}\n\nWould you like to book a test drive or get more information?`);
+        addBotMessage(`Great choice! Here's the <strong>${v.title}</strong>:` + chatVehicleCard(v) + `\nWould you like to book a test drive or get more information?`);
         chatState = 'vehicle_interest';
         showQuickReplies(['Book a Test Drive', 'More Details', 'Check Similar Vehicles', 'Back to Menu']);
       });
@@ -1242,22 +1255,21 @@ function processInventorySearch(text) {
     } else if (results.length === 1) {
       const v = results[0];
       selectedVehicle = v;
-      addBotMessage(`I found a perfect match! 🎯\n\n<strong>${v.title}</strong>\n• Price: <strong>$${v.price.toLocaleString()} CAD</strong>\n• Mileage: ${v.mileage.toLocaleString()} km\n• Type: ${v.bodyStyle}\n${v.description !== 'Stock' ? '• Features: ' + v.description : ''}\n\nWould you like to book a test drive?`);
+      addBotMessage(`I found a perfect match! 🎯\n\nHere's the <strong>${v.title}</strong>:` + chatVehicleCard(v) + `\nWould you like to book a test drive?`);
       chatState = 'vehicle_interest';
       showQuickReplies(['Book a Test Drive', 'See Similar Vehicles', 'Back to Menu']);
     } else {
-      let msg = `Great news! I found <strong>${results.length} vehicles</strong> matching your criteria:\n\n`;
-      results.slice(0, 4).forEach((v, i) => {
-        msg += `<strong>${i+1}. ${v.title}</strong>\n   $${v.price.toLocaleString()} CAD · ${v.mileage.toLocaleString()} km · ${v.bodyStyle}\n\n`;
-      });
-      if (results.length > 4) msg += `...and <strong>${results.length - 4} more</strong>!\n\n`;
-      msg += "Which one catches your eye? Or would you like to narrow it down?";
+      const show = results.slice(0, 3);
+      const extra = results.length - show.length;
+      let msg = `Great news! I found <strong>${results.length} vehicle${results.length > 1 ? 's' : ''}</strong> matching your criteria:\n\n`;
+      msg += show.map(v => chatVehicleCard(v)).join('');
+      if (extra > 0) msg += `\n<span style="font-size:.78rem;color:#666">...and <strong>${extra} more</strong> in inventory. Use the filters above to browse all.</span>`;
       addBotMessage(msg);
-      const replies = results.slice(0, 3).map((v, i) => `#${i+1} ${v.make} ${v.model}`);
-      replies.push('Book a Test Drive', 'Back to Menu');
+      const replies = show.map(v => `${v.year} ${v.make} ${v.model}`);
+      replies.push('Back to Menu');
       showQuickReplies(replies);
       chatState = 'vehicle_interest';
-      selectedVehicle = results[0];
+      selectedVehicle = show[0];
     }
   });
 }
@@ -1278,7 +1290,7 @@ function processVehicleInterest(text) {
   } else if (text.includes('detail') || text.includes('more info')) {
     if (selectedVehicle) {
       showTyping(() => {
-        addBotMessage(`Here's everything about the <strong>${selectedVehicle.title}</strong>:\n\n• <strong>VIN:</strong> ${selectedVehicle.vin}\n• <strong>Year:</strong> ${selectedVehicle.year}\n• <strong>Make:</strong> ${selectedVehicle.make}\n• <strong>Body:</strong> ${selectedVehicle.bodyStyle}\n• <strong>Price:</strong> $${selectedVehicle.price.toLocaleString()} CAD\n• <strong>Mileage:</strong> ${selectedVehicle.mileage.toLocaleString()} km\n${selectedVehicle.description !== 'Stock' ? '• <strong>Features:</strong> ' + selectedVehicle.description : ''}\n\nReady to take the next step?`);
+        addBotMessage(`Here's a full look at the <strong>${selectedVehicle.title}</strong>:` + chatVehicleCard(selectedVehicle) + `\n<span style="font-size:.75rem;color:#555">VIN: ${selectedVehicle.vin}</span>\n\nReady to take the next step?`);
         showQuickReplies(['Book a Test Drive', 'Ask About Financing', 'Back to Menu']);
       });
     }
@@ -1555,6 +1567,29 @@ function copyADF() {
 // =====================================================
 // CHAT UI HELPERS
 // =====================================================
+// ─── Vehicle card for inside chat bubbles ───────────────────────────────────
+function chatVehicleCard(v) {
+  const img = v.image ? `<img class="chat-vehicle-card-img" src="${v.image}" alt="${v.title}" onerror="this.style.background='linear-gradient(135deg,#1a3a6b,#0d2137)';this.removeAttribute('src')">` : `<div class="chat-vehicle-card-img"></div>`;
+  const desc = v.description && v.description !== 'Stock' && v.description !== v.title ? `<div style="font-size:.7rem;color:#555;margin-bottom:.5rem;line-height:1.4">${v.description}</div>` : '';
+  const link = v.link ? `<a href="${v.link}" target="_blank" rel="noopener" class="cvca cvca-primary"><i class="fas fa-external-link-alt"></i> View Listing</a>` : '';
+  return `<div class="chat-vehicle-card">
+    ${img}
+    <div class="chat-vehicle-card-body">
+      <div class="chat-vehicle-card-title">${v.title}</div>
+      <div class="chat-vehicle-card-meta">
+        <span><i class="fas fa-road"></i> ${v.mileage.toLocaleString()} km</span>
+        <span><i class="fas fa-car"></i> ${v.bodyStyle}</span>
+      </div>
+      <div class="chat-vehicle-card-price">$${v.price.toLocaleString()} <span style="font-size:.65rem;font-weight:400;color:#999">CAD</span></div>
+      ${desc}
+      <div class="chat-vehicle-card-actions">
+        ${link}
+        <button class="cvca cvca-outline" onclick="openChatAboutVehicle('${v.vin}')"><i class="fas fa-calendar-check"></i> Book Drive</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function addBotMessage(html) {
   const msgs = document.getElementById('chatMessages');
   const div = document.createElement('div');
