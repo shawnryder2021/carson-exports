@@ -961,6 +961,11 @@ function handleQuickReply(text) {
 }
 
 function processMessage(text) {
+  if (chatState === 'appt_confirm' && window._confirmHandler) {
+    window._confirmHandler(text);
+    return;
+  }
+
   const lower = text.toLowerCase();
 
   // After-hours flow
@@ -1047,57 +1052,16 @@ function processMenuChoice(choice) {
 }
 
 function processInventorySearch(text) {
-  const lower = text.toLowerCase();
-  let results = INVENTORY;
-
-  // Filter by make
-  const makes = ['toyota','mazda','hyundai','volkswagen','kia','ford','audi','chevrolet','ram','bmw','nissan'];
-  const foundMake = makes.find(m => lower.includes(m));
-  if (foundMake) results = results.filter(v => v.make.toLowerCase() === foundMake);
-
-  // Filter by model
-  const models = ['rav4','cx-5','cx5','elantra','tiguan','seltos','explorer','q3','1500','camry','edge','corolla','tacoma','silverado','x6','altima','equinox','sonata'];
-  const foundModel = models.find(m => lower.includes(m));
-  if (foundModel) results = results.filter(v => v.model.toLowerCase().includes(foundModel.replace('-','')));
-
-  // Filter by type
-  if (lower.includes('suv')) results = results.filter(v => v.bodyStyle === 'SUV');
-  else if (lower.includes('sedan')) results = results.filter(v => v.bodyStyle === 'Sedan');
-  else if (lower.includes('truck') || lower.includes('pickup')) results = results.filter(v => v.bodyStyle === 'Truck');
-
-  // Filter by price
-  const priceMatch = lower.match(/under\s*\$?(\d+)/);
-  if (priceMatch) results = results.filter(v => v.price < parseInt(priceMatch[1]) * (lower.includes('k') || parseInt(priceMatch[1]) < 100 ? 1000 : 1));
-  if (lower.includes('under 30') || lower.includes('under $30')) results = results.filter(v => v.price < 30000);
-  if (lower.includes('under 25') || lower.includes('under $25')) results = results.filter(v => v.price < 25000);
-  if (lower.includes('under 20') || lower.includes('under $20')) results = results.filter(v => v.price < 20000);
-
-  // Show all
-  if (lower.includes('everything') || lower.includes('all')) results = INVENTORY;
-
   showTyping(async () => {
-    if (results.length === 0) {
-      const reply = await callAI(text, 'inventory_search');
-      addBotMessage(reply);
-      showQuickReplies(['Show All Inventory', 'Speak With Sales', 'Back to Menu']);
-    } else if (results.length === 1) {
-      const v = results[0];
-      selectedVehicle = v;
-      addBotMessage(`I found a perfect match! 🎯\n\nHere's the <strong>${v.title}</strong>:` + chatVehicleCard(v) + `\nWould you like to book a test drive?`);
-      chatState = 'vehicle_interest';
-      showQuickReplies(['Book a Test Drive', 'See Similar Vehicles', 'Back to Menu']);
+    const ai = await callAI(text, 'inventory_search');
+    if (ai.vehicles.length > 0) {
+      showAIResponseWithCards(ai, ai.vehicles.length === 1
+        ? ['Book a Test Drive', 'See Similar Vehicles', 'Back to Menu']
+        : [...ai.vehicles.slice(0, 3).map(v => `${v.year} ${v.make} ${v.model}`), 'Back to Menu']
+      );
     } else {
-      const show = results.slice(0, 3);
-      const extra = results.length - show.length;
-      let msg = `Great news! I found <strong>${results.length} vehicle${results.length > 1 ? 's' : ''}</strong> matching your criteria:\n\n`;
-      msg += show.map(v => chatVehicleCard(v)).join('');
-      if (extra > 0) msg += `\n<span style="font-size:.78rem;color:#666">...and <strong>${extra} more</strong> in inventory. Use the filters above to browse all.</span>`;
-      addBotMessage(msg);
-      const replies = show.map(v => `${v.year} ${v.make} ${v.model}`);
-      replies.push('Back to Menu');
-      showQuickReplies(replies);
-      chatState = 'vehicle_interest';
-      selectedVehicle = show[0];
+      addBotMessage(ai.response);
+      showQuickReplies(['Show All Inventory', 'Speak With Sales', 'Back to Menu']);
     }
   });
 }
@@ -1140,9 +1104,8 @@ function processVehicleInterest(text) {
       const vehicleContext = selectedVehicle
         ? `The customer is currently looking at a ${selectedVehicle.title} priced at $${selectedVehicle.price.toLocaleString()} CAD. `
         : '';
-      const reply = await callAI(vehicleContext + text, 'vehicle_interest');
-      addBotMessage(reply);
-      showQuickReplies(['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
+      const ai = await callAI(vehicleContext + text, 'vehicle_interest');
+      showAIResponseWithCards(ai, ['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
     });
   }
 }
@@ -1179,16 +1142,18 @@ function processAfterHoursFlow(text) {
 
 function handleFreeText(text) {
   const lower = text.toLowerCase();
-  const invKeywords = ['toyota','ford','mazda','hyundai','audi','bmw','kia','chevrolet','ram','nissan','volkswagen','suv','sedan','truck','pickup','rav4','camry','corolla','crv','cr-v','tucson','cx-5','tiguan'];
-  if (invKeywords.some(k => lower.includes(k))) {
-    chatState = 'inventory_search';
-    processInventorySearch(text);
-    return;
-  }
+  const isVehicleQuery = /\b(cars?|vehicles?|suvs?|sedans?|trucks?|vans?|autos?|toyotas?|fords?|hondas?|nissans?|hyundais?|audis?|bmws?|kias?|mazdas?|chevrolets?|rams?|volkswagens?|inventory|stock|available|civic|altima|rav4|camry|corolla|tucson|tiguan|kicks|qashqai|elantra|explorer)\b/i.test(lower);
+
   showTyping(async () => {
-    const reply = await callAI(text, chatState === 'idle' ? 'menu' : chatState);
-    addBotMessage(reply);
-    showQuickReplies(['Browse Inventory', 'Book a Test Drive', 'Ask Another Question', 'Back to Menu']);
+    const state = chatState === 'idle' ? 'menu' : chatState;
+    const ai = await callAI(text, state);
+    if (isVehicleQuery && ai.vehicles.length > 0) {
+      chatState = 'inventory_search';
+      showAIResponseWithCards(ai, ['Book a Test Drive', 'Browse Inventory', 'Back to Menu']);
+    } else {
+      addBotMessage(ai.response);
+      showQuickReplies(['Browse Inventory', 'Book a Test Drive', 'Ask Another Question', 'Back to Menu']);
+    }
   });
 }
 
@@ -1230,16 +1195,6 @@ function showAppointmentConfirmation() {
     }
     window._confirmHandler = null;
   };
-}
-
-// Override processMessage for confirm state
-const _origProcessMessage = processMessage;
-function processMessage(text) {
-  if (chatState === 'appt_confirm' && window._confirmHandler) {
-    window._confirmHandler(text);
-    return;
-  }
-  _origProcessMessage(text);
 }
 
 function submitLead() {
@@ -1408,11 +1363,32 @@ async function callAI(userMessage, state) {
     });
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
-    return data.response || "I'd be happy to help! What can I assist you with?";
+    return {
+      response: data.response || "I'd be happy to help! What can I assist you with?",
+      vehicles: data.vehicles || []
+    };
   } catch (e) {
     console.warn('AI call failed, using fallback:', e.message);
-    return "I'd be happy to help! You can ask me about our vehicles, hours, financing, or book an appointment.";
+    return {
+      response: "I'd be happy to help! You can ask me about our vehicles, hours, financing, or book an appointment.",
+      vehicles: []
+    };
   }
+}
+
+function showAIResponseWithCards(ai, quickReplies) {
+  let msg = ai.response;
+  if (ai.vehicles && ai.vehicles.length > 0) {
+    const show = ai.vehicles.slice(0, 3);
+    msg += '\n\n' + show.map(v => chatVehicleCard(v)).join('');
+    if (ai.vehicles.length > 3) {
+      msg += `\n<span style="font-size:.78rem;color:#666">...and <strong>${ai.vehicles.length - 3} more</strong> in stock.</span>`;
+    }
+    selectedVehicle = show[0];
+    chatState = 'vehicle_interest';
+  }
+  addBotMessage(msg);
+  showQuickReplies(quickReplies);
 }
 
 function addBotMessage(html) {

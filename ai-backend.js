@@ -600,6 +600,8 @@ CRITICAL RULES:
 
 TONE: ${toneInstruction}
 
+FORMAT: Plain text only. Do NOT use markdown (no **bold**, no [links](url), no bullet lists with •). The chat widget renders HTML separately — your job is to write natural conversational text. Keep responses concise (2-4 sentences max unless detailed info was requested).
+
 Remember: This is a natural conversation between a helpful AI and a customer. Respond like you're talking to a friend, not filling out a form.`;
 }
 
@@ -830,8 +832,21 @@ function searchInventory(query, limit = 4) {
   const stopWords = new Set(['the','is','at','in','on','to','for','of','and','or','do','you','have','any','what','how','can','with','this','that','are','was','be','an','it','we','my','me','your','about','would','like','want','some','get','got','see','show','tell','anything','something','does','did']);
   const terms = query.toLowerCase().replace(/[?!.,;:'"]/g, '').split(/[\s,]+/).filter(t => t.length > 1 && !stopWords.has(t));
 
+  // Helper: check if two strings share a root (handles plurals, partial matches)
+  // "nissans" matches "nissan", "suvs" matches "suv", "toyota" matches "toyotas"
+  function fuzzyMatch(a, b) {
+    if (a.includes(b) || b.includes(a)) return true;
+    // Strip trailing 's' or 'es' for plural handling
+    const stemA = a.replace(/e?s$/, '');
+    const stemB = b.replace(/e?s$/, '');
+    if (stemA.includes(stemB) || stemB.includes(stemA)) return true;
+    return false;
+  }
+
   // Score each vehicle
   const scored = inventory.map(v => {
+    const makeLower = (v.make || '').toLowerCase();
+    const modelLower = (v.model || '').toLowerCase();
     const haystack = [
       v.make, v.model, v.trim, v.color, v.bodyStyle, String(v.year), String(v.price),
       ...(v.features || [])
@@ -839,14 +854,20 @@ function searchInventory(query, limit = 4) {
 
     let score = 0;
     for (const term of terms) {
-      if (v.make.toLowerCase().includes(term)) score += 10;      // Strong make match
-      if (v.model.toLowerCase().includes(term)) score += 10;     // Strong model match
+      if (fuzzyMatch(makeLower, term)) score += 10;              // Strong make match
+      if (fuzzyMatch(modelLower, term)) score += 10;             // Strong model match
       if (haystack.includes(term)) score += 3;                    // General match
+      // Also check stem against haystack
+      const stem = term.replace(/e?s$/, '');
+      if (stem !== term && haystack.includes(stem)) score += 3;
       // Price-based matching
       if (term.match(/^\d+k?$/) || term === 'under' || term === 'budget') {
         const num = parseInt(term.replace('k', '000'));
         if (num > 1000 && v.price <= num * 1.15) score += 5;     // Within budget
       }
+      // Body style matching (suv, sedan, truck, etc.)
+      const bodyLower = (v.bodyStyle || '').toLowerCase();
+      if (fuzzyMatch(bodyLower, term)) score += 8;
     }
     return { vehicle: v, score };
   });
@@ -1113,7 +1134,14 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     }
     if (relevantVehicles.length > 0) {
       systemPrompt += '\n\nRELEVANT VEHICLES IN STOCK:\n' + relevantVehicles.map(formatVehicleForPrompt).join('\n\n');
-      systemPrompt += '\n\nWhen mentioning vehicles, include the listing link so customers can view full details.';
+      systemPrompt += `\n\nCRITICAL RESPONSE FORMAT RULES:
+- The frontend will AUTOMATICALLY display vehicle photo cards with prices, links, and "Book Drive" buttons below your message.
+- Do NOT list vehicles with bullet points, numbered lists, or URLs in your text — the cards handle that.
+- Instead, write a SHORT conversational reply (1-3 sentences) acknowledging what was found.
+- Example good response: "Great news! We have ${relevantVehicles.length} Nissan${relevantVehicles.length > 1 ? 's' : ''} in stock right now. Take a look and let me know if any catch your eye!"
+- Example BAD response: "1. **2022 Nissan Kicks** — $16,511 [View Details](https://...)" ← NEVER do this.
+- Do NOT use markdown formatting (no ** for bold, no []() links). Use plain text only.
+- Keep it friendly, brief, and let the vehicle cards do the heavy lifting.`;
     }
 
     // Call OpenAI API
@@ -1136,9 +1164,24 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     // Extract AI response
     const aiResponse = response.data.choices[0].message.content;
 
-    // Return response
+    // Return response + matching vehicles so frontend can render cards
+    const vehicleCards = relevantVehicles.map(v => ({
+      vin: v.vin || v.vehicle_id || '',
+      title: [v.year, v.make, v.model, v.trim].filter(Boolean).join(' '),
+      year: v.year,
+      make: v.make,
+      model: v.model,
+      price: v.price,
+      mileage: v.mileage,
+      bodyStyle: v.bodyStyle || v.body_style || '',
+      image: v.image || '',
+      link: v.url || v.link || '',
+      description: v.description || ''
+    }));
+
     res.json({
       response: aiResponse,
+      vehicles: vehicleCards,
       timestamp: new Date().toISOString()
     });
 
