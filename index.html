@@ -941,6 +941,8 @@ let chatOpen = false;
 let chatState = 'idle';
 let isAfterHours = false;
 let currentLead = {};
+let chatHistory = []; // conversation history for OpenAI context
+let currentSettings = {}; // cached dealership settings for AI calls
 let leads = [];
 let webhookLog = [];
 let chatSessionCount = 0;
@@ -1122,12 +1124,14 @@ function sendUserMessage() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  chatHistory.push({ role: 'user', content: text });
   addUserMessage(text);
   clearQuickReplies();
   processMessage(text);
 }
 
 function handleQuickReply(text) {
+  chatHistory.push({ role: 'user', content: text });
   addUserMessage(text);
   clearQuickReplies();
   processMessage(text);
@@ -1248,9 +1252,10 @@ function processInventorySearch(text) {
   // Show all
   if (lower.includes('everything') || lower.includes('all')) results = INVENTORY;
 
-  showTyping(() => {
+  showTyping(async () => {
     if (results.length === 0) {
-      addBotMessage("I couldn't find any vehicles matching that description in our current inventory. Would you like to:\n• Try a different search\n• Speak with our sales team\n• Browse all inventory");
+      const reply = await callAI(text, 'inventory_search');
+      addBotMessage(reply);
       showQuickReplies(['Show All Inventory', 'Speak With Sales', 'Back to Menu']);
     } else if (results.length === 1) {
       const v = results[0];
@@ -1307,13 +1312,16 @@ function processVehicleInterest(text) {
       addBotMessage("Great pick! Would you like to book a test drive or get more details?");
       showQuickReplies(['Book a Test Drive', 'More Details', 'Back to Menu']);
     });
-  } else if (text.includes('financ')) {
-    showTyping(() => {
-      addBotMessage("We work with multiple lenders to find you the best rate! Our finance team can get you pre-approved quickly.\n\nWant me to connect you with our finance department?");
-      showQuickReplies(['Yes, Connect Me', 'Back to Menu']);
-    });
   } else {
-    handleFreeText(text);
+    // Let AI handle any question the user asks about the vehicle or dealership
+    showTyping(async () => {
+      const vehicleContext = selectedVehicle
+        ? `The customer is currently looking at a ${selectedVehicle.title} priced at $${selectedVehicle.price.toLocaleString()} CAD. `
+        : '';
+      const reply = await callAI(vehicleContext + text, 'vehicle_interest');
+      addBotMessage(reply);
+      showQuickReplies(['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
+    });
   }
 }
 
@@ -1349,43 +1357,19 @@ function processAfterHoursFlow(text) {
 
 function handleFreeText(text) {
   const lower = text.toLowerCase();
-  // Try inventory keyword match
-  const invKeywords = ['toyota','ford','mazda','hyundai','audi','bmw','kia','chevrolet','ram','nissan','volkswagen','suv','sedan','truck','rav4','camry','corolla'];
+  // Route vehicle-related queries to inventory search for card display
+  const invKeywords = ['toyota','ford','mazda','hyundai','audi','bmw','kia','chevrolet','ram','nissan','volkswagen','suv','sedan','truck','pickup','rav4','camry','corolla','crv','cr-v','tucson','cx-5','tiguan'];
   if (invKeywords.some(k => lower.includes(k))) {
     chatState = 'inventory_search';
     processInventorySearch(text);
     return;
   }
-  // FAQ matching
-  if (lower.includes('financ') || lower.includes('loan')) {
-    addBotMessage("Yes! We work with multiple lenders to find you the best financing rates. Our finance team can help get you pre-approved. Would you like to connect with them?");
-    showQuickReplies(['Yes, Connect Me', 'Back to Menu']);
-    chatState = 'vehicle_interest';
-  } else if (lower.includes('trade') || lower.includes('trade-in')) {
-    addBotMessage("Absolutely! We accept trade-ins and offer fair market value. Bring your vehicle in and we'll provide a no-obligation appraisal. Want to book a time?");
-    showQuickReplies(['Book Appointment', 'Back to Menu']);
-    chatState = 'vehicle_interest';
-  } else if (lower.includes('warranty') || lower.includes('carfax')) {
-    addBotMessage("Many of our vehicles come with remaining manufacturer warranty, and we provide a <strong>free Carfax report</strong> with every vehicle. We also offer extended warranty options. Any specific vehicle you'd like to know about?");
-    showQuickReplies(['Browse Inventory', 'Back to Menu']);
-    chatState = 'menu';
-  } else if (lower.includes('hour') || lower.includes('open') || lower.includes('close')) {
-    addBotMessage("Our hours are <strong>Monday–Saturday, 9:00 AM – 8:00 PM</strong>. We're closed on Sundays.\n\n📍 550 Windmill Road, Dartmouth, NS");
-    showQuickReplies(['Book Appointment', 'Back to Menu']);
-    chatState = 'menu';
-  } else if (lower.includes('address') || lower.includes('location') || lower.includes('where')) {
-    addBotMessage("We're located at <strong>550 Windmill Road, Dartmouth, NS B4E 1V3</strong>. Easy to find and plenty of parking!\n\nWould you like directions or want to book a visit?");
-    showQuickReplies(['Book a Visit', 'Back to Menu']);
-    chatState = 'menu';
-  } else if (lower.includes('deliver')) {
-    addBotMessage("Yes! We offer delivery within the Maritime provinces for a small fee. Ask our sales team for details.");
-    showQuickReplies(['Speak With Sales', 'Back to Menu']);
-    chatState = 'menu';
-  } else {
-    addBotMessage("I'd be happy to help with that! Here's what I can assist with:");
-    chatState = 'menu';
-    showQuickReplies(['Book a Service Appointment', 'Ask About a Vehicle', 'Speak With Sales', 'Check Inventory']);
-  }
+  // Everything else goes to OpenAI with full inventory + admin settings context
+  showTyping(async () => {
+    const reply = await callAI(text, chatState === 'idle' ? 'menu' : chatState);
+    addBotMessage(reply);
+    showQuickReplies(['Browse Inventory', 'Book a Test Drive', 'Ask Another Question', 'Back to Menu']);
+  });
 }
 
 // =====================================================
@@ -1590,7 +1574,37 @@ function chatVehicleCard(v) {
   </div>`;
 }
 
+/**
+ * Call the backend /api/chat endpoint which calls OpenAI with live inventory + admin settings.
+ * Falls back gracefully if the backend is unavailable.
+ */
+async function callAI(userMessage, state) {
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: chatHistory.slice(-12),
+        userMessage,
+        chatState: state || chatState,
+        vehicleQuery: userMessage,
+        dealershipSettings: currentSettings
+      })
+    });
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    return data.response || "I'd be happy to help! What can I assist you with?";
+  } catch (e) {
+    console.warn('AI call failed, using fallback:', e.message);
+    return "I'd be happy to help! You can ask me about our vehicles, hours, financing, or book an appointment.";
+  }
+}
+
 function addBotMessage(html) {
+  // Track plain-text version in conversation history for AI context
+  const plainText = html.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').trim();
+  if (plainText) chatHistory.push({ role: 'assistant', content: plainText });
+
   const msgs = document.getElementById('chatMessages');
   const div = document.createElement('div');
   div.className = 'chat-msg bot';
@@ -1832,6 +1846,7 @@ async function loadSettings() {
     const res = await fetch('/api/settings');
     if (!res.ok) return;
     const s = await res.json();
+    currentSettings = s; // cache for AI calls
     if (s.dealerName)     document.getElementById('settingName').value    = s.dealerName;
     if (s.phone)          document.getElementById('settingPhone').value   = s.phone;
     if (s.address)        document.getElementById('settingAddress').value = s.address;

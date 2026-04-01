@@ -1066,6 +1066,7 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
       messages = [],
       userMessage,
       chatState = 'menu',
+      vehicleQuery,
       dealershipSettings = {}
     } = req.body;
 
@@ -1083,18 +1084,37 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
       { role: 'user', content: userMessage }
     ];
 
+    // Merge live backend settings as defaults so admin panel changes take effect
+    const mergedSettings = {
+      dealershipName:   dealershipSettings.dealerName || dealershipSettings.dealershipName || backendAdminSettings.dealershipName,
+      phone:            dealershipSettings.phone            || backendAdminSettings.phone,
+      address:          dealershipSettings.address          || backendAdminSettings.address,
+      hours:            dealershipSettings.hours            || backendAdminSettings.hours,
+      services:         dealershipSettings.services         || backendAdminSettings.services,
+      brands:           dealershipSettings.brands           || backendAdminSettings.brands,
+      appointmentRules: dealershipSettings.appointmentRules || backendAdminSettings.appointmentRules,
+      responseTone:     dealershipSettings.responseTone     || backendAdminSettings.responseTone,
+      faqKnowledge:     dealershipSettings.faqKnowledge     || backendAdminSettings.faqKnowledge
+    };
+
     // Generate dynamic system prompt with dealership settings AND current chat state
-    const systemPrompt = generateSystemPrompt({
-      dealershipName: dealershipSettings.dealershipName,
-      phone: dealershipSettings.phone,
-      address: dealershipSettings.address,
-      hours: dealershipSettings.hours,
-      services: dealershipSettings.services,
-      brands: dealershipSettings.brands,
-      appointmentRules: dealershipSettings.appointmentRules,
-      responseTone: dealershipSettings.responseTone,
-      faqKnowledge: dealershipSettings.faqKnowledge
-    }, chatState, recentMessages);
+    let systemPrompt = generateSystemPrompt(mergedSettings, chatState, recentMessages);
+
+    // Inject live inventory context — search for relevant vehicles based on the query
+    const query = vehicleQuery || userMessage;
+    const relevantVehicles = searchInventory(query, 5);
+    if (inventory.length > 0) {
+      const makes = [...new Set(inventory.map(v => v.make))].join(', ');
+      const prices = inventory.map(v => v.price).filter(p => p > 0);
+      const priceRange = prices.length > 0
+        ? `$${Math.min(...prices).toLocaleString()}–$${Math.max(...prices).toLocaleString()} CAD`
+        : 'various prices';
+      systemPrompt += `\n\nINVENTORY SUMMARY: ${inventory.length} vehicles in stock. Makes available: ${makes}. Price range: ${priceRange}.`;
+    }
+    if (relevantVehicles.length > 0) {
+      systemPrompt += '\n\nRELEVANT VEHICLES IN STOCK:\n' + relevantVehicles.map(formatVehicleForPrompt).join('\n\n');
+      systemPrompt += '\n\nWhen mentioning vehicles, include the listing link so customers can view full details.';
+    }
 
     // Call OpenAI API
     const response = await axios.post(OPENAI_API_URL, {
