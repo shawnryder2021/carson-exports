@@ -167,6 +167,13 @@ const adfLimiter = rateLimit({
   standardHeaders: true,
 });
 
+const manualLeadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,                // 5 manual leads per minute (testing)
+  message: 'Too many manual leads created. Try again in a minute.',
+  standardHeaders: true,
+});
+
 // OpenAI API Configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
@@ -1513,6 +1520,102 @@ app.post('/api/admin/send-message', async (req, res) => {
   } catch (error) {
     console.error('Admin Send Message Error:', error);
     res.status(500).json({ error: 'Failed to send message: ' + error.message });
+  }
+});
+
+/**
+ * POST /api/leads/manual
+ * Create a manual SMS lead (for testing or offline customer interactions)
+ *
+ * Body:
+ * {
+ *   phone: "+19025551234" (required),
+ *   name: "John Smith" (required),
+ *   email?: "john@example.com",
+ *   vehicleInterest?: "Honda CR-V",
+ *   department?: "Sales" | "Service" (default: "Sales"),
+ *   initialNotes?: "Called from dealership"
+ * }
+ *
+ * Returns: { success, leadId, message, phone }
+ */
+app.post('/api/leads/manual', manualLeadLimiter, (req, res) => {
+  try {
+    const { phone, name, email, vehicleInterest, department = 'Sales', initialNotes } = req.body;
+
+    // Validate required fields
+    if (!phone || !name) {
+      return res.status(400).json({ error: 'Phone and name are required' });
+    }
+
+    // Normalize phone to E.164 format
+    let normalizedPhone = phone.replace(/\D/g, '');
+    if (!normalizedPhone.startsWith('1')) {
+      normalizedPhone = '1' + normalizedPhone;
+    }
+    const formattedPhone = '+' + normalizedPhone;
+
+    // Check for duplicate phone
+    if (getSMSLeadByPhone(formattedPhone)) {
+      return res.status(409).json({ error: 'Lead with this phone number already exists' });
+    }
+
+    // Create greeting message
+    const greeting = `Hi ${name}! 👋 Thanks for your interest in our vehicles. What can we help with? 1) Browse vehicles 2) Book appointment 3) Ask a question`;
+
+    // Create new lead object
+    const newLead = {
+      id: 'manual_' + Date.now(),
+      phone: formattedPhone,
+      name: name,
+      email: email || '',
+      vehicleInterest: vehicleInterest || '',
+      department: department,
+      source: 'Manual Entry',
+      channel: 'SMS',
+      status: 'active',
+      currentState: 'ah_menu',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      smsHistory: [
+        { role: 'assistant', content: greeting }
+      ],
+      appointmentData: {},
+      clickHistory: [],
+      interestScore: 0,
+      needsEscalation: false,
+      notes: initialNotes || ''
+    };
+
+    // Add to leads array
+    smsLeads.push(newLead);
+
+    // Send greeting SMS via Twilio
+    if (twilioClient && TWILIO_PHONE_NUMBER) {
+      twilioClient.messages
+        .create({
+          body: greeting,
+          from: TWILIO_PHONE_NUMBER,
+          to: formattedPhone
+        })
+        .then(msg => {
+          console.log(`📱 Manual lead created: ${name} (${formattedPhone}) - Greeting SMS sent: ${msg.sid}`);
+        })
+        .catch(err => {
+          console.error(`⚠️  Manual lead created but SMS failed: ${err.message}`);
+        });
+    }
+
+    res.json({
+      success: true,
+      leadId: newLead.id,
+      message: 'Lead created and greeting SMS sent',
+      phone: formattedPhone
+    });
+
+  } catch (error) {
+    console.error('Manual Lead Creation Error:', error);
+    res.status(500).json({ error: 'Failed to create lead: ' + error.message });
   }
 });
 
