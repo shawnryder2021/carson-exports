@@ -268,7 +268,7 @@ tr:hover td{background:var(--accent-glow)}
   <header class="site-header">
     <div class="site-logo">
       <div class="icon-box"><i class="fas fa-car"></i></div>
-      <div class="site-logo-text" id="siteLogoText">Carson Exports<span>Lower Sackville, NS</span></div>
+      <div class="site-logo-text" id="siteLogoText">Carson Exports<span>Dartmouth, NS</span></div>
     </div>
     <nav class="site-nav">
       <a href="#" class="active">Home</a>
@@ -313,7 +313,7 @@ tr:hover td{background:var(--accent-glow)}
   <!-- Footer -->
   <footer style="background:var(--primary);color:rgba(255,255,255,.7);padding:2rem;text-align:center;font-size:.8rem;margin-top:2rem">
     <p style="margin-bottom:.5rem;color:#fff;font-weight:600">Carson Exports</p>
-    <p>905 Sackville Dr, Lower Sackville, NS B4E 1V3</p>
+    <p>550 Windmill Road, Dartmouth, NS, B3B 1B3</p>
     <p style="margin-top:1rem;font-size:.7rem;opacity:.5">Dealer AI Chat & Appointment System — Prototype Demo</p>
   </footer>
 
@@ -481,11 +481,11 @@ tr:hover td{background:var(--accent-glow)}
           <div class="card-body">
             <div class="form-row">
               <div class="form-group"><label>Dealership Name</label><input type="text" id="settingName" value="Carson Exports"></div>
-              <div class="form-group"><label>Phone Number</label><input type="text" id="settingPhone" value="(902) 555-0100"></div>
+              <div class="form-group"><label>Phone Number</label><input type="text" id="settingPhone" value="1-833-706-3093"></div>
             </div>
-            <div class="form-group"><label>Address</label><input type="text" id="settingAddress" value="905 Sackville Dr, Lower Sackville, NS B4E 1V3"></div>
+            <div class="form-group"><label>Address</label><input type="text" id="settingAddress" value="550 Windmill Road, Dartmouth, NS, B3B 1B3"></div>
             <div class="form-row">
-              <div class="form-group"><label>Business Hours</label><input type="text" id="settingHours" value="Mon-Sat 9:00 AM — 8:00 PM"></div>
+              <div class="form-group"><label>Business Hours</label><input type="text" id="settingHours" value="Monday–Saturday, 9:00 AM – 8:00 PM (Closed Sundays)"></div>
               <div class="form-group"><label>After-Hours Trigger Time</label>
                 <select id="settingAfterHours">
                   <option value="17">5:00 PM</option><option value="18">6:00 PM</option><option value="19">7:00 PM</option><option value="20" selected>8:00 PM</option><option value="21">9:00 PM</option>
@@ -698,46 +698,39 @@ async function loadInventoryFromSheets() {
         row[header] = fields[idx] || '';
       });
 
-      // Parse image URL from nested JSON
-      let imageUrl = '';
-      try {
-        if (row.image) {
-          const imageData = JSON.parse(row.image);
-          if (Array.isArray(imageData) && imageData[0] && imageData[0].url) {
-            imageUrl = imageData[0].url;
-          }
-        }
-      } catch (e) {
-        // If parsing fails, try to use as direct URL
-        imageUrl = row.image || '';
-      }
+      // Image URL is a direct column named "image[0].url"
+      const imageUrl = row['image[0].url'] || '';
 
-      // Infer bodyStyle from description and title if not provided
-      let bodyStyle = row['body style'] || row['body_style'] || '';
+      // bodyStyle from sheet column "body_style"
+      let bodyStyle = row['body_style'] || '';
       if (!bodyStyle) {
-        const desc = (row.description + ' ' + row.title).toLowerCase();
-        if (desc.includes('truck') || desc.includes('f-150') || desc.includes('silverado') || desc.includes('ram')) {
+        const desc = ((row['description'] || '') + ' ' + (row['title'] || '')).toLowerCase();
+        if (desc.includes('truck') || desc.includes('f-150') || desc.includes('silverado') || desc.includes('ram 1500') || desc.includes('tacoma') || desc.includes('tundra') || desc.includes('ranger') || desc.includes('ridgeline')) {
           bodyStyle = 'Truck';
-        } else if (desc.includes('suv') || desc.includes('crossover') || desc.includes('rav4') || desc.includes('crv') || desc.includes('rogue')) {
+        } else if (desc.includes('rav4') || desc.includes('cr-v') || desc.includes('rogue') || desc.includes('tucson') || desc.includes('tiguan') || desc.includes('kicks') || desc.includes('venue') || desc.includes('kona') || desc.includes('seltos') || desc.includes('qashqai') || desc.includes('bronco') || desc.includes('explorer') || desc.includes('edge') || desc.includes('sportage') || desc.includes('rvr') || desc.includes('envision') || desc.includes('q3') || desc.includes('suv') || desc.includes('crossover') || desc.includes('4runner') || desc.includes('pilot') || desc.includes('escape')) {
           bodyStyle = 'SUV';
         } else {
           bodyStyle = 'Sedan';
         }
       }
 
+      // Normalise price — strip currency suffix "14777.00 CAD" → 14777
+      const rawPrice = row['price'] || '0';
+      const price = parseInt(rawPrice.replace(/[^0-9.]/g, '')) || 0;
+
       // Create vehicle object
       const vehicle = {
         vin: row['vehicle_id'] || '',
         title: row['title'] || '',
         description: row['description'] || '',
-        price: parseInt(row['price'] || row['price'] || '0'),
-        mileage: parseInt(row['mileage'] || row['mileage.value'] || '0'),
-        image: imageUrl || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'300\'%3E%3Cdefs%3E%3ClinearGradient id=\'grad\'%3E%3Cstop offset=\'0%25\' style=\'stop-color:%231a3a6b\' /%3E%3Cstop offset=\'100%25\' style=\'stop-color:%230d2137\' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=\'400\' height=\'300\' fill=\'url(%23grad)\' /%3E%3C/svg%3E',
+        price: price,
+        mileage: parseInt(row['mileage.value'] || '0'),
+        image: imageUrl,
         year: parseInt(row['year'] || '0'),
         make: row['make'] || '',
         model: row['model'] || '',
         bodyStyle: bodyStyle,
-        link: row['link'] || row['url'] || ''
+        link: row['link'] || ''
       };
 
       INVENTORY.push(vehicle);
@@ -1188,11 +1181,11 @@ function handleFreeText(text) {
     showQuickReplies(['Browse Inventory', 'Back to Menu']);
     chatState = 'menu';
   } else if (lower.includes('hour') || lower.includes('open') || lower.includes('close')) {
-    addBotMessage("Our hours are <strong>Monday–Saturday, 9:00 AM – 8:00 PM</strong>. We're closed on Sundays.\n\n📍 905 Sackville Dr, Lower Sackville, NS");
+    addBotMessage("Our hours are <strong>Monday–Saturday, 9:00 AM – 8:00 PM</strong>. We're closed on Sundays.\n\n📍 550 Windmill Road, Dartmouth, NS");
     showQuickReplies(['Book Appointment', 'Back to Menu']);
     chatState = 'menu';
   } else if (lower.includes('address') || lower.includes('location') || lower.includes('where')) {
-    addBotMessage("We're located at <strong>905 Sackville Dr, Lower Sackville, NS B4E 1V3</strong>. Easy to find and plenty of parking!\n\nWould you like directions or want to book a visit?");
+    addBotMessage("We're located at <strong>550 Windmill Road, Dartmouth, NS, B3B 1B3</strong>. Easy to find and plenty of parking!\n\nWould you like directions or want to book a visit?");
     showQuickReplies(['Book a Visit', 'Back to Menu']);
     chatState = 'menu';
   } else if (lower.includes('deliver')) {
