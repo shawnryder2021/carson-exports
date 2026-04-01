@@ -268,7 +268,7 @@ tr:hover td{background:var(--accent-glow)}
   <header class="site-header">
     <div class="site-logo">
       <div class="icon-box"><i class="fas fa-car"></i></div>
-      <div class="site-logo-text" id="siteLogoText">Dave Forde Auto Sales<span>Lower Sackville, NS</span></div>
+      <div class="site-logo-text" id="siteLogoText">Carson Exports<span>Lower Sackville, NS</span></div>
     </div>
     <nav class="site-nav">
       <a href="#" class="active">Home</a>
@@ -312,7 +312,7 @@ tr:hover td{background:var(--accent-glow)}
 
   <!-- Footer -->
   <footer style="background:var(--primary);color:rgba(255,255,255,.7);padding:2rem;text-align:center;font-size:.8rem;margin-top:2rem">
-    <p style="margin-bottom:.5rem;color:#fff;font-weight:600">Dave Forde Auto Sales</p>
+    <p style="margin-bottom:.5rem;color:#fff;font-weight:600">Carson Exports</p>
     <p>905 Sackville Dr, Lower Sackville, NS B4E 1V3</p>
     <p style="margin-top:1rem;font-size:.7rem;opacity:.5">Dealer AI Chat & Appointment System — Prototype Demo</p>
   </footer>
@@ -562,7 +562,7 @@ tr:hover td{background:var(--accent-glow)}
           <div class="card-header">General Information</div>
           <div class="card-body">
             <div class="form-row">
-              <div class="form-group"><label>Dealership Name</label><input type="text" id="settingName" value="Dave Forde Auto Sales"></div>
+              <div class="form-group"><label>Dealership Name</label><input type="text" id="settingName" value="Carson Exports"></div>
               <div class="form-group"><label>Phone Number</label><input type="text" id="settingPhone" value="(902) 555-0100"></div>
             </div>
             <div class="form-group"><label>Address</label><input type="text" id="settingAddress" value="905 Sackville Dr, Lower Sackville, NS B4E 1V3"></div>
@@ -580,8 +580,8 @@ tr:hover td{background:var(--accent-glow)}
           <div class="card-header">CRM Integration</div>
           <div class="card-body">
             <div class="form-row">
-              <div class="form-group"><label>CRM Email Address (ADF)</label><input type="email" id="settingCRM" value="leads@davefordeautosales.ca" placeholder="crm@dealership.com"></div>
-              <div class="form-group"><label>Webhook URL</label><input type="url" id="settingWebhook" value="https://crm.davefordeautosales.ca/api/webhook/leads" placeholder="https://..."></div>
+              <div class="form-group"><label>CRM Email Address (ADF)</label><input type="email" id="settingCRM" value="carsonexportsleads@gmail.com" placeholder="crm@dealership.com"></div>
+              <div class="form-group"><label>Webhook URL</label><input type="url" id="settingWebhook" value="https://crm.carsonexports.com/api/webhook/leads" placeholder="https://..."></div>
             </div>
             <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> Save Settings</button>
           </div>
@@ -669,10 +669,10 @@ Q: Can I get a vehicle history report? A: Yes, we provide a free Carfax report w
     dealershipId: "dave-forde-auto",
     apiKey: "df_live_xxxxxxxxxxxxxxxx",
     primaryColor: "#1e6fff",
-    dealerName: "Dave Forde Auto Sales",
+    dealerName: "Carson Exports",
     afterHoursTime: "20:00",
-    webhookUrl: "https://crm.davefordeautosales.ca/api/webhook/leads",
-    crmEmail: "leads@davefordeautosales.ca",
+    webhookUrl: "https://crm.carsonexports.com/api/webhook/leads",
+    crmEmail: "carsonexportsleads@gmail.com",
     position: "bottom-right",
     theme: "auto"
   };
@@ -742,30 +742,30 @@ Q: Can I get a vehicle history report? A: Yes, we provide a free Carfax report w
 // INVENTORY DATA (from Google Sheets)
 // =====================================================
 const INVENTORY = [
-  {vin:"2T3RWRFV7SW287266",title:"2025 Toyota RAV4 Hybrid XLE",description:"AWD, Hybrid, Leather Interior, Sunroof, Heated Seats, Push-to-Start",price:33999,mileage:40000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/ILX7NRFI4JDXFHHH5LD4TVQSJ4.webp",year:2025,make:"Toyota",model:"RAV4",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2025-toyota-rav4-hybrid-xle-FXMZ3IT6TSGbJwkIhIZaQwvdp"},
-  {vin:"JM3KFBCL9S0559081",title:"2025 Mazda CX-5 GS",description:"AWD, Hybrid, Leather Interior, Sunroof, Heated Seats, Push-to-Start",price:33999,mileage:40000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/M6F6N6UTBZESZNV64MI5NQ4JQE.webp",year:2025,make:"Mazda",model:"CX-5",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2025-mazda-cx-5-gs-LnKXKi6ZSgKeNOI2HGkYswvdp"},
-  {vin:"KMHLM4DG8SU026112",title:"2025 Hyundai Elantra Preferred w/Tech",description:"AWD, Leather Interior, Push-to-Start, Backup Camera, Heated Seats and Steering Wheel",price:33999,mileage:38000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/UJUW4DAH6FEF3PZYXJCR465FKI.webp",year:2025,make:"Hyundai",model:"Elantra",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2025-hyundai-elantra-preferred-UBK5X6h7TsmWmTelRPZKtQvdp"},
-  {vin:"KMHLM4DG5SU953780",title:"2025 Hyundai Elantra Preferred w/Tech",description:"Stock",price:25999,mileage:28000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/4WN34TA2HZHSNEI5YDVWYIXQME.webp",year:2025,make:"Hyundai",model:"Elantra",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2025-hyundai-elantra-preferred-sOaNdd7kRciehhPEp6ZlIwvdp"},
-  {vin:"3VVMB7AX8RM043884",title:"2024 Volkswagen Tiguan Comfortline 4MOTION",description:"Stock",price:25999,mileage:35000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/R6QC7TFGT5HBLFJAHAYNRZGUDQ.webp",year:2024,make:"Volkswagen",model:"Tiguan",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2024-volkswagen-tiguan-comfortline-6yWmUOPEQumyCumpnxMcAQvdp"},
-  {vin:"KNDEUCAA0R7658683",title:"2024 Kia Seltos EX",description:"Stock",price:29999,mileage:71000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/XUBYWFPGMVHXVF6QPQEC3MYZ5A.webp",year:2024,make:"Kia",model:"Seltos",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2024-kia-seltos-ex-9M5dkJEYRRC4lo1Wt1Sr7Avdp"},
-  {vin:"1FMSK8DH0RGA49636",title:"2024 Ford Explorer XLT",description:"AWD, Sunroof, Leather Interior, Backup Camera, Heated Seats and Steering Wheel!",price:26999,mileage:53000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/YT6JRKMUXZH6PIHGDH2TVMM6VM.webp",year:2024,make:"Ford",model:"Explorer",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2024-ford-explorer-xlt-GGdqShd3RjGiDhGswpXRCwvdp"},
-  {vin:"5YFB4MDE3RP108108",title:"2024 Audi Q3 Progressiv 45 TFSI quattro",description:"6 Passenger, AWD, Leather Interior, Remote Start, Backup Camera, Heated Seats and Steering Wheel!",price:37999,mileage:89000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/P7CQRF7Z7JFC5G2JYVKOURJHT4.webp",year:2024,make:"Audi",model:"Q3",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2024-audi-q3-progressiv-QNlWvcL0SGGsqjcWW4Chwgvdp"},
-  {vin:"WA1EECF31R1097561",title:"2024 Audi Q3 Progressiv 45 TFSI quattro",description:"Stock",price:25999,mileage:56000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/K5PZTHS6WFERVHGTDZMGTAL6HQ.webp",year:2024,make:"Audi",model:"Q3",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2024-audi-q3-progressiv-QNlWvcL0SGGsqjcWW4Chwgvdp"},
-  {vin:"1C6RR7LT8PS581216",title:"2023 Ram 1500 Classic SLT 4x4 Crew Cab",description:"Stock",price:37999,mileage:55000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/RSD2XSBHK5BTLEG35E66HH7P3I.webp",year:2023,make:"Ram",model:"1500",bodyStyle:"Truck",link:"https://www.davefordeautosales.ca/inventory/2023-ram-1500-classic-slt-9kdeUzDXS2qc4nVaVGneOwvdp"},
-  {vin:"5YFB4MDE7PP020062",title:"2023 Toyota RAV4 XLE",description:"Stock",price:37999,mileage:58000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/U26356USN5ADZEFJEILEVLSSWY.webp",year:2023,make:"Toyota",model:"RAV4",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2023-toyota-rav4-xle-YRkEaubgQv6WHBhMERrdrQvdp"},
-  {vin:"2T3R1RFV6PC351417",title:"2023 Toyota RAV4 XLE",description:"Stock",price:22999,mileage:88000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/CNCUZCLWBVGDVFI2CP3CL53RAM.webp",year:2023,make:"Toyota",model:"RAV4",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2023-toyota-rav4-xle-YRkEaubgQv6WHBhMERrdrQvdp"},
-  {vin:"4T1G11AK5PU167924",title:"2023 Toyota Camry SE Auto",description:"AWD, Sunroof, Heated Seats and Steering Wheel, Push-to-Start",price:34999,mileage:53000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/TBSL5PYJ6VG7RLBFK65X57YELM.webp",year:2023,make:"Toyota",model:"Camry",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2023-toyota-camry-se-lUdgKSmxQziFjFhwgsAKaAvdp"},
-  {vin:"2FMPK4K91PBA31497",title:"2023 Ford Edge Titanium",description:"Stock",price:26999,mileage:76000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/6KYMM4QI6FGKZIC66J3A65D7XI.webp",year:2023,make:"Ford",model:"Edge",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2023-ford-edge-titanium-llzy3R7sT6WFOq52IJUcIwvdp"},
-  {vin:"JTDBDMHE0PJ002856",title:"2023 Toyota Corolla Hybrid SE",description:"AWD, Leather Interior, Heated Seats, Backup Camera, Remote Starter!",price:29999,mileage:86000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/S3RP76EAU5DDPP57YLODNFIF2Y.webp",year:2023,make:"Toyota",model:"Corolla",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2023-toyota-corolla-hybrid-se-nghTMGaQTOe3NHaBmEsSRgvdp"},
-  {vin:"KMHLM4AG3PU525153",title:"2023 Hyundai Elantra Preferred w/Tech",description:"AWD, Hybrid, Backup Camera, Heated Seats",price:33999,mileage:48000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/TZ5AKJ7BFJFRXD5ZAZQNQHSEQQ.webp",year:2023,make:"Hyundai",model:"Elantra",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2023-hyundai-elantra-preferred-oAiU4FJqRs6zg9CCts2YgAvdp"},
-  {vin:"3TYDZ5BN3PT030957",title:"2023 Toyota Tacoma 4x4 Double Cab",description:"Stock",price:21999,mileage:76000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/BQ4QUCABKNA27BO2GAVC6MB4OE.webp",year:2023,make:"Toyota",model:"Tacoma",bodyStyle:"Truck",link:"https://www.davefordeautosales.ca/inventory/2023-toyota-tacoma-vY3MrLDjRmelafYG2p9r6Avdp"},
-  {vin:"2T3R1RFV6NC275789",title:"2022 Toyota RAV4 XLE",description:"AWD, Power Tailgate, Sunroof, Heated Seats and Steering Wheel, Push-to-Start, Backup Camera",price:46999,mileage:58000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/UM2LJ7LIXNDF3NSYLCUJK6CDOE.webp",year:2022,make:"Toyota",model:"RAV4",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2022-toyota-rav4-xle-6jSRAkp8THa2X1SloyKhQwvdp"},
-  {vin:"3GCUDEED3NG625638",title:"2022 Chevrolet Silverado 1500 RST",description:"AWD, Power Tailgate, Sunroof, Heated Seats and Steering Wheel, Push-to-Start, Backup Camera",price:33999,mileage:58000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/YEZAPZUBT5FO7AZGJRF5OKNENM.webp",year:2022,make:"Chevrolet",model:"Silverado",bodyStyle:"Truck",link:"https://www.davefordeautosales.ca/inventory/2022-chevrolet-silverado-1500-rst-HR8GmsSpQsavsHAUdLQrFgvdp"},
-  {vin:"5UXCY8C06M9E47161",title:"2021 BMW X6 M50i",description:"Sports Activity Coupe",price:48999,mileage:32000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/PIBSUDFN6NF5RPTA6RIQTZWDWQ.webp",year:2021,make:"BMW",model:"X6",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2021-bmw-x6-m50i-f1r4E8DnTYKAr5YofUXplQvdp"},
-  {vin:"1N4BL4DW9KN318555",title:"2019 Nissan Altima 2.5 SV",description:"Sedan",price:19999,mileage:43000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/trim/RQPH7JMV7RE4NLQD7BNQDLYLCI.webp",year:2019,make:"Nissan",model:"Altima",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2019-nissan-altima-2-5-sv-OX2N3il2Sl2hnWJlCSVsNwvdp"},
-  {vin:"2GNAXSEVXJ6241192",title:"2018 Chevrolet Equinox LT",description:"Low Km's, AWD, Sunroof, Push-to-Start, Heated Seats",price:19999,mileage:38000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/EURNEV64EFESTNIHRWA4JYHK4Q.webp",year:2018,make:"Chevrolet",model:"Equinox",bodyStyle:"SUV",link:"https://www.davefordeautosales.ca/inventory/2018-chevrolet-equinox-lt-9fPyAIWYT5iFsZT4gCVE2Avdp"},
-  {vin:"2T1BURHEXHC941930",title:"2017 Toyota Corolla LE",description:"Stock",price:6995,mileage:240000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/YJVYOK35QBEOLIKB67AUDEDB3A.webp",year:2017,make:"Toyota",model:"Corolla",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2017-toyota-corolla-le-mEykpbb6TRCV0seZSH40swvdp"},
-  {vin:"5NPE34AF8FH238214",title:"2015 Hyundai Sonata Limited",description:"Stock",price:16995,mileage:72000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/KGHAJH6XVRFFLNDKELRP5QVAC4.webp",year:2015,make:"Hyundai",model:"Sonata",bodyStyle:"Sedan",link:"https://www.davefordeautosales.ca/inventory/2015-hyundai-sonata-2-4l-limited-ERrGe96mR3uMhdavvuiTFAvdp"}
+  {vin:"2T3RWRFV7SW287266",title:"2025 Toyota RAV4 Hybrid XLE",description:"AWD, Hybrid, Leather Interior, Sunroof, Heated Seats, Push-to-Start",price:33999,mileage:40000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/ILX7NRFI4JDXFHHH5LD4TVQSJ4.webp",year:2025,make:"Toyota",model:"RAV4",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2025-toyota-rav4-hybrid-xle-FXMZ3IT6TSGbJwkIhIZaQwvdp"},
+  {vin:"JM3KFBCL9S0559081",title:"2025 Mazda CX-5 GS",description:"AWD, Hybrid, Leather Interior, Sunroof, Heated Seats, Push-to-Start",price:33999,mileage:40000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/M6F6N6UTBZESZNV64MI5NQ4JQE.webp",year:2025,make:"Mazda",model:"CX-5",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2025-mazda-cx-5-gs-LnKXKi6ZSgKeNOI2HGkYswvdp"},
+  {vin:"KMHLM4DG8SU026112",title:"2025 Hyundai Elantra Preferred w/Tech",description:"AWD, Leather Interior, Push-to-Start, Backup Camera, Heated Seats and Steering Wheel",price:33999,mileage:38000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/UJUW4DAH6FEF3PZYXJCR465FKI.webp",year:2025,make:"Hyundai",model:"Elantra",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2025-hyundai-elantra-preferred-UBK5X6h7TsmWmTelRPZKtQvdp"},
+  {vin:"KMHLM4DG5SU953780",title:"2025 Hyundai Elantra Preferred w/Tech",description:"Stock",price:25999,mileage:28000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/4WN34TA2HZHSNEI5YDVWYIXQME.webp",year:2025,make:"Hyundai",model:"Elantra",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2025-hyundai-elantra-preferred-sOaNdd7kRciehhPEp6ZlIwvdp"},
+  {vin:"3VVMB7AX8RM043884",title:"2024 Volkswagen Tiguan Comfortline 4MOTION",description:"Stock",price:25999,mileage:35000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/R6QC7TFGT5HBLFJAHAYNRZGUDQ.webp",year:2024,make:"Volkswagen",model:"Tiguan",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2024-volkswagen-tiguan-comfortline-6yWmUOPEQumyCumpnxMcAQvdp"},
+  {vin:"KNDEUCAA0R7658683",title:"2024 Kia Seltos EX",description:"Stock",price:29999,mileage:71000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/XUBYWFPGMVHXVF6QPQEC3MYZ5A.webp",year:2024,make:"Kia",model:"Seltos",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2024-kia-seltos-ex-9M5dkJEYRRC4lo1Wt1Sr7Avdp"},
+  {vin:"1FMSK8DH0RGA49636",title:"2024 Ford Explorer XLT",description:"AWD, Sunroof, Leather Interior, Backup Camera, Heated Seats and Steering Wheel!",price:26999,mileage:53000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/YT6JRKMUXZH6PIHGDH2TVMM6VM.webp",year:2024,make:"Ford",model:"Explorer",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2024-ford-explorer-xlt-GGdqShd3RjGiDhGswpXRCwvdp"},
+  {vin:"5YFB4MDE3RP108108",title:"2024 Audi Q3 Progressiv 45 TFSI quattro",description:"6 Passenger, AWD, Leather Interior, Remote Start, Backup Camera, Heated Seats and Steering Wheel!",price:37999,mileage:89000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/P7CQRF7Z7JFC5G2JYVKOURJHT4.webp",year:2024,make:"Audi",model:"Q3",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2024-audi-q3-progressiv-QNlWvcL0SGGsqjcWW4Chwgvdp"},
+  {vin:"WA1EECF31R1097561",title:"2024 Audi Q3 Progressiv 45 TFSI quattro",description:"Stock",price:25999,mileage:56000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/K5PZTHS6WFERVHGTDZMGTAL6HQ.webp",year:2024,make:"Audi",model:"Q3",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2024-audi-q3-progressiv-QNlWvcL0SGGsqjcWW4Chwgvdp"},
+  {vin:"1C6RR7LT8PS581216",title:"2023 Ram 1500 Classic SLT 4x4 Crew Cab",description:"Stock",price:37999,mileage:55000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/RSD2XSBHK5BTLEG35E66HH7P3I.webp",year:2023,make:"Ram",model:"1500",bodyStyle:"Truck",link:"https://www.carsonexports.com/inventory/2023-ram-1500-classic-slt-9kdeUzDXS2qc4nVaVGneOwvdp"},
+  {vin:"5YFB4MDE7PP020062",title:"2023 Toyota RAV4 XLE",description:"Stock",price:37999,mileage:58000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/U26356USN5ADZEFJEILEVLSSWY.webp",year:2023,make:"Toyota",model:"RAV4",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2023-toyota-rav4-xle-YRkEaubgQv6WHBhMERrdrQvdp"},
+  {vin:"2T3R1RFV6PC351417",title:"2023 Toyota RAV4 XLE",description:"Stock",price:22999,mileage:88000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/CNCUZCLWBVGDVFI2CP3CL53RAM.webp",year:2023,make:"Toyota",model:"RAV4",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2023-toyota-rav4-xle-YRkEaubgQv6WHBhMERrdrQvdp"},
+  {vin:"4T1G11AK5PU167924",title:"2023 Toyota Camry SE Auto",description:"AWD, Sunroof, Heated Seats and Steering Wheel, Push-to-Start",price:34999,mileage:53000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/TBSL5PYJ6VG7RLBFK65X57YELM.webp",year:2023,make:"Toyota",model:"Camry",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2023-toyota-camry-se-lUdgKSmxQziFjFhwgsAKaAvdp"},
+  {vin:"2FMPK4K91PBA31497",title:"2023 Ford Edge Titanium",description:"Stock",price:26999,mileage:76000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/6KYMM4QI6FGKZIC66J3A65D7XI.webp",year:2023,make:"Ford",model:"Edge",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2023-ford-edge-titanium-llzy3R7sT6WFOq52IJUcIwvdp"},
+  {vin:"JTDBDMHE0PJ002856",title:"2023 Toyota Corolla Hybrid SE",description:"AWD, Leather Interior, Heated Seats, Backup Camera, Remote Starter!",price:29999,mileage:86000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/S3RP76EAU5DDPP57YLODNFIF2Y.webp",year:2023,make:"Toyota",model:"Corolla",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2023-toyota-corolla-hybrid-se-nghTMGaQTOe3NHaBmEsSRgvdp"},
+  {vin:"KMHLM4AG3PU525153",title:"2023 Hyundai Elantra Preferred w/Tech",description:"AWD, Hybrid, Backup Camera, Heated Seats",price:33999,mileage:48000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/TZ5AKJ7BFJFRXD5ZAZQNQHSEQQ.webp",year:2023,make:"Hyundai",model:"Elantra",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2023-hyundai-elantra-preferred-oAiU4FJqRs6zg9CCts2YgAvdp"},
+  {vin:"3TYDZ5BN3PT030957",title:"2023 Toyota Tacoma 4x4 Double Cab",description:"Stock",price:21999,mileage:76000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/BQ4QUCABKNA27BO2GAVC6MB4OE.webp",year:2023,make:"Toyota",model:"Tacoma",bodyStyle:"Truck",link:"https://www.carsonexports.com/inventory/2023-toyota-tacoma-vY3MrLDjRmelafYG2p9r6Avdp"},
+  {vin:"2T3R1RFV6NC275789",title:"2022 Toyota RAV4 XLE",description:"AWD, Power Tailgate, Sunroof, Heated Seats and Steering Wheel, Push-to-Start, Backup Camera",price:46999,mileage:58000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/UM2LJ7LIXNDF3NSYLCUJK6CDOE.webp",year:2022,make:"Toyota",model:"RAV4",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2022-toyota-rav4-xle-6jSRAkp8THa2X1SloyKhQwvdp"},
+  {vin:"3GCUDEED3NG625638",title:"2022 Chevrolet Silverado 1500 RST",description:"AWD, Power Tailgate, Sunroof, Heated Seats and Steering Wheel, Push-to-Start, Backup Camera",price:33999,mileage:58000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/YEZAPZUBT5FO7AZGJRF5OKNENM.webp",year:2022,make:"Chevrolet",model:"Silverado",bodyStyle:"Truck",link:"https://www.carsonexports.com/inventory/2022-chevrolet-silverado-1500-rst-HR8GmsSpQsavsHAUdLQrFgvdp"},
+  {vin:"5UXCY8C06M9E47161",title:"2021 BMW X6 M50i",description:"Sports Activity Coupe",price:48999,mileage:32000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/PIBSUDFN6NF5RPTA6RIQTZWDWQ.webp",year:2021,make:"BMW",model:"X6",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2021-bmw-x6-m50i-f1r4E8DnTYKAr5YofUXplQvdp"},
+  {vin:"1N4BL4DW9KN318555",title:"2019 Nissan Altima 2.5 SV",description:"Sedan",price:19999,mileage:43000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/trim/RQPH7JMV7RE4NLQD7BNQDLYLCI.webp",year:2019,make:"Nissan",model:"Altima",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2019-nissan-altima-2-5-sv-OX2N3il2Sl2hnWJlCSVsNwvdp"},
+  {vin:"2GNAXSEVXJ6241192",title:"2018 Chevrolet Equinox LT",description:"Low Km's, AWD, Sunroof, Push-to-Start, Heated Seats",price:19999,mileage:38000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/EURNEV64EFESTNIHRWA4JYHK4Q.webp",year:2018,make:"Chevrolet",model:"Equinox",bodyStyle:"SUV",link:"https://www.carsonexports.com/inventory/2018-chevrolet-equinox-lt-9fPyAIWYT5iFsZT4gCVE2Avdp"},
+  {vin:"2T1BURHEXHC941930",title:"2017 Toyota Corolla LE",description:"Stock",price:6995,mileage:240000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/YJVYOK35QBEOLIKB67AUDEDB3A.webp",year:2017,make:"Toyota",model:"Corolla",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2017-toyota-corolla-le-mEykpbb6TRCV0seZSH40swvdp"},
+  {vin:"5NPE34AF8FH238214",title:"2015 Hyundai Sonata Limited",description:"Stock",price:16995,mileage:72000,image:"https://media.getedealer.com/w_800,h_600,q_90,c_f,v1/inventory/KGHAJH6XVRFFLNDKELRP5QVAC4.webp",year:2015,make:"Hyundai",model:"Sonata",bodyStyle:"Sedan",link:"https://www.carsonexports.com/inventory/2015-hyundai-sonata-2-4l-limited-ERrGe96mR3uMhdavvuiTFAvdp"}
 ];
 
 // =====================================================
@@ -944,7 +944,7 @@ function startChat() {
     statusBar.className = 'chat-status-bar open-status';
     statusBar.innerHTML = '<i class="fas fa-circle" style="font-size:.4rem;vertical-align:middle;color:#22c55e"></i> We\'re open! Chat with us now';
     showTyping(() => {
-      addBotMessage("Hi! 👋 Welcome to <strong>Dave Forde Auto Sales</strong>. I'm your AI assistant and I'm here to help.\n\nWhat can I do for you today?");
+      addBotMessage("Hi! 👋 Welcome to <strong>Carson Exports</strong>. I'm your AI assistant and I'm here to help.\n\nWhat can I do for you today?");
       chatState = 'menu';
       showQuickReplies(['Book a Service Appointment', 'Ask About a Vehicle', 'Speak With Sales', 'Check Inventory']);
     });
@@ -1247,7 +1247,7 @@ function showAppointmentConfirmation() {
   window._confirmHandler = function(text) {
     const l = text.toLowerCase();
     if (l.includes('confirm') || l.includes('yes') || l.includes('book')) {
-      addBotMessage("✅ <strong>Your appointment request has been submitted!</strong>\n\nOur team will confirm your appointment shortly. You'll receive a confirmation via email.\n\nThank you for choosing Dave Forde Auto Sales!");
+      addBotMessage("✅ <strong>Your appointment request has been submitted!</strong>\n\nOur team will confirm your appointment shortly. You'll receive a confirmation via email.\n\nThank you for choosing Carson Exports!");
       submitLead();
       chatState = 'complete';
       showQuickReplies(['Start New Inquiry']);
@@ -1299,7 +1299,7 @@ function triggerWebhook(lead) {
   const logEntry = {
     timestamp: new Date().toLocaleString(),
     lead: lead.name,
-    endpoint: document.getElementById('settingWebhook')?.value || 'https://crm.davefordeautosales.ca/api/webhook/leads',
+    endpoint: document.getElementById('settingWebhook')?.value || 'https://crm.carsonexports.com/api/webhook/leads',
     status: simulateFail ? 'Failed' : 'Success',
     payload: payload
   };
@@ -1365,9 +1365,9 @@ function showADFPreview() {
       <comments>Appointment: ${escapeHtml(lead.date || 'TBD')} at ${escapeHtml(lead.time || 'TBD')} - ${lead.department || 'Sales'}</comments>
     </customer>
     <vendor>
-      <vendorname>Dave Forde Auto Sales</vendorname>
+      <vendorname>Carson Exports</vendorname>
       <contact>
-        <email>${document.getElementById('settingCRM')?.value || 'leads@davefordeautosales.ca'}</email>
+        <email>${document.getElementById('settingCRM')?.value || 'carsonexportsleads@gmail.com'}</email>
       </contact>
     </vendor>
     <provider>
@@ -1383,7 +1383,7 @@ function showADFPreview() {
         <span class="badge-pill badge-blue"><i class="fas fa-envelope"></i> ADF/XML</span>
         <span style="font-size:.78rem;color:var(--text-muted)">Auto Data Format — CRM Compatible</span>
       </div>
-      <p style="font-size:.8rem;color:var(--text-muted)">This ADF email will be sent to: <strong>${document.getElementById('settingCRM')?.value || 'leads@davefordeautosales.ca'}</strong></p>
+      <p style="font-size:.8rem;color:var(--text-muted)">This ADF email will be sent to: <strong>${document.getElementById('settingCRM')?.value || 'carsonexportsleads@gmail.com'}</strong></p>
     </div>
     <div class="code-block" style="font-size:.72rem">${escapeHtml(adfXml)}</div>`;
   openModal('adfModal');
@@ -1629,7 +1629,7 @@ function sendReminder(type, name) {
   const icon = type === 'sms' ? 'comment-sms' : 'envelope';
   const label = type === 'sms' ? 'SMS' : 'Email';
   document.getElementById('webhookModalTitle').innerHTML = `<i class="fas fa-${icon}" style="color:var(--success)"></i> ${label} Reminder Sent`;
-  document.getElementById('webhookModalBody').innerHTML = `<div style="text-align:center;padding:1.5rem"><div style="width:60px;height:60px;background:#dcfce7;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.5rem;color:var(--success)"><i class="fas fa-check"></i></div><p><strong>${label} reminder sent to ${escapeHtml(name)}</strong></p><p style="font-size:.85rem;color:var(--text-muted);margin-top:.5rem">"Hi ${escapeHtml(name.split(' ')[0])}, it's been a while since your last visit to Dave Forde Auto Sales! We'd love to see you for a service check-up. Book online or call us at (902) 555-0100."</p></div>`;
+  document.getElementById('webhookModalBody').innerHTML = `<div style="text-align:center;padding:1.5rem"><div style="width:60px;height:60px;background:#dcfce7;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.5rem;color:var(--success)"><i class="fas fa-check"></i></div><p><strong>${label} reminder sent to ${escapeHtml(name)}</strong></p><p style="font-size:.85rem;color:var(--text-muted);margin-top:.5rem">"Hi ${escapeHtml(name.split(' ')[0])}, it's been a while since your last visit to Carson Exports! We'd love to see you for a service check-up. Book online or call us at (902) 555-0100."</p></div>`;
   document.getElementById('webhookModalFooter').innerHTML = '<button class="btn btn-primary btn-sm" onclick="closeModal(\'webhookModal\')">Done</button>';
   openModal('webhookModal');
 }
