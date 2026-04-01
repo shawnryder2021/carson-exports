@@ -19,9 +19,22 @@ const axios = require('axios');
 const twilio = require('twilio');
 const localtunnel = require('localtunnel');
 const rateLimit = require('express-rate-limit');
+const { createClient } = require('@supabase/supabase-js');
 
 const path = require('path');
 const fs = require('fs');
+
+// ─── Supabase Client ────────────────────────────────────────────────────────
+const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
+
+if (supabase) {
+  console.log('✅ Supabase connected — leads and settings will be persisted to database');
+} else {
+  console.warn('⚠️  Supabase not configured. Data will be in-memory only (lost on restart).');
+  console.warn('   Set SUPABASE_URL and SUPABASE_ANON_KEY in .env to enable persistence.');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,18 +43,70 @@ const PORT = process.env.PORT || 3001;
 const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/1gNiaM_TTswU8WmuP7O3Vdu_qj2ow1ZaUpHXulP1YUoI/export?format=csv';
 const INVENTORY_REFRESH_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-// Admin settings — synced from frontend admin panel via /api/admin-settings
+// Admin settings — in-memory cache, persisted to Supabase ce_settings table
 let backendAdminSettings = {
-  dealershipName: 'Carson Exports',
-  phone: '1-833-706-3093',
-  address: '550 Windmill Road, Dartmouth, NS, B3B 1B3',
-  hours: 'Monday–Saturday, 9:00 AM – 8:00 PM (Closed Sundays)',
-  services: 'Sales, Service, Financing, Trade-ins',
-  brands: 'Toyota, Honda, Nissan, Hyundai, Ford, Volkswagen, Audi, BMW, and more',
+  dealerName:       'Carson Exports',
+  dealershipName:   'Carson Exports',   // alias used throughout prompts
+  phone:            '1-833-706-3093',
+  address:          '550 Windmill Road, Dartmouth, NS, B3B 1B3',
+  hours:            'Monday–Saturday, 9:00 AM – 8:00 PM (Closed Sundays)',
+  afterHoursTime:   '20:00',
+  services:         'Sales, Service, Financing, Trade-ins',
+  brands:           'Toyota, Honda, Nissan, Hyundai, Ford, Volkswagen, Audi, BMW, and more',
   appointmentRules: 'Appointments available Mon-Sat. Service appointments in 30-min slots from 8AM-5PM. Sales appointments from 9AM-7PM. No Sunday appointments.',
-  responseTone: 'friendly',
-  faqKnowledge: ''
+  responseTone:     'friendly',
+  faqKnowledge:     '',
+  crmEmail:         'carsonexportsleads@gmail.com',
+  webhookUrl:       'https://crm.carsonexports.com/api/webhook/leads',
+  primaryColor:     '#1e6fff'
 };
+
+/**
+ * Load settings from Supabase into backendAdminSettings cache
+ */
+async function loadSettingsFromDB() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('ce_settings').select('key, value');
+    if (error) throw error;
+    data.forEach(({ key, value }) => {
+      backendAdminSettings[key] = value;
+      if (key === 'dealerName') backendAdminSettings.dealershipName = value; // keep alias in sync
+    });
+    console.log(`⚙️  Settings loaded from Supabase (${data.length} keys)`);
+  } catch (err) {
+    console.warn('⚠️  Could not load settings from Supabase:', err.message);
+  }
+}
+
+/**
+ * Persist a settings key-value pair to Supabase
+ */
+async function saveSettingToDB(key, value) {
+  if (!supabase) return;
+  try {
+    await supabase.from('ce_settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  } catch (err) {
+    console.warn(`⚠️  Could not save setting [${key}] to Supabase:`, err.message);
+  }
+}
+
+/**
+ * Persist an entire settings object to Supabase
+ */
+async function saveAllSettingsToDB(settings) {
+  if (!supabase) return;
+  const rows = Object.entries(settings).map(([key, value]) => ({
+    key,
+    value: String(value),
+    updated_at: new Date().toISOString()
+  }));
+  try {
+    await supabase.from('ce_settings').upsert(rows, { onConflict: 'key' });
+  } catch (err) {
+    console.warn('⚠️  Could not save settings to Supabase:', err.message);
+  }
+}
 
 /**
  * Simple RFC 4180 CSV line parser that handles quoted fields with commas
@@ -200,8 +265,131 @@ if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER) {
   console.warn('   Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in .env to enable SMS');
 }
 
-// SMS Leads Storage (in-memory, could be moved to database for production)
+// SMS Leads Storage — in-memory cache loaded from Supabase on startup
 let smsLeads = [];
+
+/**
+ * Persist a lead to Supabase ce_leads table (upsert by phone)
+ */
+async function persistLeadToDB(lead) {
+  if (!supabase) return;
+  try {
+    const row = {
+      id:               lead.dbId || undefined,
+      name:             lead.name || null,
+      phone:            lead.phone || null,
+      email:            lead.email || null,
+      vehicle_interest: lead.vehicleInterest || null,
+      source:           lead.channel === 'SMS' ? 'sms' : 'web_chat',
+      status:           lead.status === 'active' ? 'new' : (lead.status || 'new'),
+      interest_score:   lead.interestScore || 0,
+      notes:            lead.notes || null,
+      last_message_at:  lead.updatedAt || new Date().toISOString()
+    };
+    const { data, error } = await supabase
+      .from('ce_leads')
+      .upsert(row, { onConflict: 'phone' })
+      .select('id')
+      .single();
+    if (error) throw error;
+    // Store the DB id back on the in-memory object so future upserts hit same row
+    if (data && data.id) lead.dbId = data.id;
+  } catch (err) {
+    console.warn('⚠️  Could not persist lead to Supabase:', err.message);
+  }
+}
+
+/**
+ * Persist a single message to ce_conversations
+ */
+async function persistMessageToDB(lead, role, content) {
+  if (!supabase || !lead.dbId) return;
+  try {
+    await supabase.from('ce_conversations').insert({
+      lead_id: lead.dbId,
+      role,
+      content,
+      source: lead.channel === 'SMS' ? 'sms' : 'web_chat'
+    });
+  } catch (err) {
+    console.warn('⚠️  Could not persist message to Supabase:', err.message);
+  }
+}
+
+/**
+ * Persist an appointment to ce_appointments
+ */
+async function persistAppointmentToDB(lead, apptData) {
+  if (!supabase) return;
+  try {
+    await supabase.from('ce_appointments').insert({
+      lead_id:          lead.dbId || null,
+      lead_name:        lead.name || null,
+      lead_phone:       lead.phone || null,
+      lead_email:       lead.email || null,
+      vehicle_interest: apptData.vehicleInterest || lead.vehicleInterest || null,
+      appointment_date: apptData.date || null,
+      appointment_time: apptData.time || null,
+      appointment_type: apptData.type || 'test_drive',
+      status:           'pending',
+      notes:            apptData.notes || null
+    });
+    console.log(`📅 Appointment saved to Supabase for ${lead.name} (${lead.phone})`);
+  } catch (err) {
+    console.warn('⚠️  Could not persist appointment to Supabase:', err.message);
+  }
+}
+
+/**
+ * Load all leads from Supabase into the in-memory smsLeads cache on startup
+ */
+async function loadLeadsFromDB() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase
+      .from('ce_leads')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    // Map DB rows back to the in-memory lead format
+    smsLeads = (data || []).map(row => ({
+      dbId:            row.id,
+      id:              row.id,
+      phone:           row.phone,
+      name:            row.name,
+      email:           row.email,
+      vehicleInterest: row.vehicle_interest,
+      source:          row.source,
+      channel:         row.source === 'sms' ? 'SMS' : 'Web',
+      status:          row.status === 'new' ? 'active' : row.status,
+      interestScore:   row.interest_score || 0,
+      notes:           row.notes || '',
+      currentState:    'ah_menu',
+      smsHistory:      [],
+      appointmentData: {},
+      clickHistory:    [],
+      needsEscalation: false,
+      createdAt:       row.created_at,
+      updatedAt:       row.last_message_at || row.updated_at
+    }));
+    console.log(`📥 Loaded ${smsLeads.length} leads from Supabase`);
+  } catch (err) {
+    console.warn('⚠️  Could not load leads from Supabase:', err.message);
+  }
+}
+
+/**
+ * Delete a lead from Supabase by phone number
+ */
+async function deleteLeadFromDB(phone) {
+  if (!supabase) return;
+  try {
+    await supabase.from('ce_leads').delete().eq('phone', phone);
+  } catch (err) {
+    console.warn('⚠️  Could not delete lead from Supabase:', err.message);
+  }
+}
 
 // Tunnel management
 let activeTunnel = null;
@@ -981,13 +1169,57 @@ app.get('/api/admin-settings', (req, res) => {
  * Stores admin settings from the frontend so SMS chat uses the same rules as web chat.
  * Called automatically when admin saves settings in the dashboard.
  */
-app.post('/api/admin-settings', (req, res) => {
-  const allowed = ['dealershipName', 'phone', 'address', 'hours', 'services', 'brands', 'appointmentRules', 'responseTone', 'faqKnowledge'];
+app.post('/api/admin-settings', async (req, res) => {
+  const allowed = ['dealershipName', 'dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'services', 'brands', 'appointmentRules', 'responseTone', 'faqKnowledge', 'crmEmail', 'webhookUrl', 'primaryColor'];
+  const updated = {};
   allowed.forEach(key => {
-    if (req.body[key] !== undefined) backendAdminSettings[key] = req.body[key];
+    if (req.body[key] !== undefined) {
+      backendAdminSettings[key] = req.body[key];
+      updated[key] = req.body[key];
+      if (key === 'dealerName') backendAdminSettings.dealershipName = req.body[key];
+      if (key === 'dealershipName') backendAdminSettings.dealerName = req.body[key];
+    }
   });
-  console.log('⚙️  Admin settings updated:', Object.keys(req.body).filter(k => allowed.includes(k)).join(', '));
+  console.log('⚙️  Admin settings updated:', Object.keys(updated).join(', '));
+  await saveAllSettingsToDB(updated);
   res.json({ success: true, settings: backendAdminSettings });
+});
+
+/**
+ * GET /api/settings
+ * Returns dealership settings for the frontend settings form
+ */
+app.get('/api/settings', async (req, res) => {
+  // Return the current in-memory settings (already loaded from DB on startup)
+  res.json({
+    dealerName:       backendAdminSettings.dealerName || backendAdminSettings.dealershipName,
+    phone:            backendAdminSettings.phone,
+    address:          backendAdminSettings.address,
+    hours:            backendAdminSettings.hours,
+    afterHoursTime:   backendAdminSettings.afterHoursTime || '20:00',
+    crmEmail:         backendAdminSettings.crmEmail,
+    webhookUrl:       backendAdminSettings.webhookUrl,
+    primaryColor:     backendAdminSettings.primaryColor || '#1e6fff'
+  });
+});
+
+/**
+ * POST /api/settings
+ * Save dealership settings from the frontend settings form
+ */
+app.post('/api/settings', async (req, res) => {
+  const allowed = ['dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'crmEmail', 'webhookUrl', 'primaryColor'];
+  const updated = {};
+  allowed.forEach(key => {
+    if (req.body[key] !== undefined) {
+      updated[key] = req.body[key];
+      backendAdminSettings[key] = req.body[key];
+      if (key === 'dealerName') backendAdminSettings.dealershipName = req.body[key];
+    }
+  });
+  await saveAllSettingsToDB(updated);
+  console.log('💾 Dealership settings saved to Supabase:', Object.keys(updated).join(', '));
+  res.json({ success: true, settings: updated });
 });
 
 /**
@@ -1041,8 +1273,9 @@ app.post('/api/webhook/adf', adfLimiter, async (req, res) => {
       });
     }
 
-    // Store SMS lead
+    // Store SMS lead (in-memory + persist to DB)
     smsLeads.push(smsLead);
+    persistLeadToDB(smsLead);
 
     // Send initial SMS greeting — include a vehicle link if we have a match
     try {
@@ -1587,8 +1820,9 @@ app.post('/api/leads/manual', manualLeadLimiter, (req, res) => {
       notes: initialNotes || ''
     };
 
-    // Add to leads array
+    // Add to leads array and persist to DB
     smsLeads.push(newLead);
+    persistLeadToDB(newLead);
 
     // Send greeting SMS via Twilio
     if (twilioClient && TWILIO_PHONE_NUMBER) {
@@ -1784,6 +2018,7 @@ app.delete('/api/sms-lead/:phone', (req, res) => {
   const beforeCount = smsLeads.length;
   smsLeads = smsLeads.filter(lead => lead.phone !== phone);
   const removed = beforeCount - smsLeads.length;
+  if (removed > 0) deleteLeadFromDB(phone);
   console.log(`🗑️  Removed ${removed} SMS lead(s) for ${phone}`);
   res.json({ success: true, removed, message: removed > 0 ? `Cleared lead for ${phone}` : 'No lead found for that phone' });
 });
@@ -1793,6 +2028,10 @@ app.listen(PORT, async () => {
   console.log(`🚗 Carson Exports AI Backend running on http://localhost:${PORT}`);
   console.log(`📝 Chat endpoint: POST http://localhost:${PORT}/api/chat`);
   console.log(`✅ Health check: GET http://localhost:${PORT}/api/health`);
+
+  // Load persisted settings and leads from Supabase
+  await loadSettingsFromDB();
+  await loadLeadsFromDB();
 
   // Fetch live inventory from Google Sheets on startup
   await fetchInventoryFromSheets();

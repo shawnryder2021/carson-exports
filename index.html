@@ -1788,12 +1788,65 @@ function sendReminder(type, name) {
 }
 
 // =====================================================
-// ADMIN SETTINGS
+// ADMIN SETTINGS — backed by /api/settings
 // =====================================================
-function saveSettings() {
-  const name = document.getElementById('settingName').value;
-  document.getElementById('siteLogoText').innerHTML = name + '<span>' + document.getElementById('settingAddress').value.split(',').pop().trim() + '</span>';
-  showToast('Settings saved successfully!');
+
+/** Load settings from backend on page open and populate the form */
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const s = await res.json();
+    if (s.dealerName)     document.getElementById('settingName').value    = s.dealerName;
+    if (s.phone)          document.getElementById('settingPhone').value   = s.phone;
+    if (s.address)        document.getElementById('settingAddress').value = s.address;
+    if (s.hours)          document.getElementById('settingHours').value   = s.hours;
+    if (s.afterHoursTime) document.getElementById('settingAfterHours') && (document.getElementById('settingAfterHours').value = s.afterHoursTime);
+    if (s.crmEmail)       document.getElementById('settingCRM').value     = s.crmEmail;
+    if (s.webhookUrl)     document.getElementById('settingWebhook').value = s.webhookUrl;
+    applySettingsToUI(s);
+  } catch (e) { /* backend may not be running in static preview */ }
+}
+
+/** Apply settings visually across the page */
+function applySettingsToUI(s) {
+  const name    = s.dealerName || document.getElementById('settingName').value;
+  const address = s.address    || document.getElementById('settingAddress').value;
+  const city    = address.split(',').slice(1, 3).join(',').trim() || address.split(',').pop().trim();
+  document.getElementById('siteLogoText').innerHTML = name + '<span>' + city + '</span>';
+  // Update footer
+  const footer = document.querySelector('footer p:nth-child(2)');
+  if (footer) footer.textContent = address;
+}
+
+/** Save settings to backend and update UI */
+async function saveSettings() {
+  const payload = {
+    dealerName:     document.getElementById('settingName').value,
+    phone:          document.getElementById('settingPhone').value,
+    address:        document.getElementById('settingAddress').value,
+    hours:          document.getElementById('settingHours').value,
+    afterHoursTime: document.getElementById('settingAfterHours') ? document.getElementById('settingAfterHours').value : '20:00',
+    crmEmail:       document.getElementById('settingCRM').value,
+    webhookUrl:     document.getElementById('settingWebhook').value
+  };
+  applySettingsToUI(payload);
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      showToast('Settings saved to database ✓');
+      // Also sync to admin-settings for SMS consistency
+      fetch('/api/admin-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {});
+    } else {
+      showToast('Settings saved locally (DB unavailable)');
+    }
+  } catch (e) {
+    showToast('Settings saved locally (offline mode)');
+  }
 }
 
 function saveAISettings() { showToast('AI Knowledge settings saved!'); }
@@ -2069,6 +2122,7 @@ function clearManualForm() {
 // =====================================================
 (async () => {
   await loadInventoryFromSheets();
+  await loadSettings();
   renderInventory(INVENTORY);
   renderLeads();
   renderWebhookLog();
