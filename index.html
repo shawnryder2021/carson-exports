@@ -702,14 +702,14 @@ Get Trade-In Value</textarea>
             <div class="code-block" id="embedCode">&lt;!-- Carson Exports AI Chat Widget --&gt;
 &lt;script&gt;
 window.DealerAIConfig = {
-  serverUrl: "https://chat.carsonexports.com",
+  serverUrl: "https://carsons.shawnryder.com",
   dealerName: "Carson Exports",
   primaryColor: "#1e6fff",
   position: "bottom-right",
   theme: "auto"
 };
 &lt;/script&gt;
-&lt;script src="https://chat.carsonexports.com/chat-widget.js" defer&gt;&lt;/script&gt;</div>
+&lt;script src="https://carsons.shawnryder.com/chat-widget.js" defer crossorigin="anonymous"&gt;&lt;/script&gt;</div>
             <div style="margin-top:1rem;font-size:.8rem;color:var(--text-muted)">
               <p><i class="fas fa-info-circle"></i> Paste this into the <code>&lt;head&gt;</code> section of any page. The widget loads everything automatically — no other files needed.</p>
               <div style="margin-top:.75rem;padding:.75rem;background:var(--card-alt);border-radius:var(--radius-sm);border:1px solid var(--border)">
@@ -731,7 +731,7 @@ window.DealerAIConfig = {
             <table style="width:100%;font-size:.8rem;border-collapse:collapse">
               <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:.5rem">Option</th><th style="padding:.5rem">Default</th><th style="padding:.5rem">Description</th></tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>serverUrl</code></td><td style="padding:.5rem"><em>required</em></td><td style="padding:.5rem">Your chat server URL (where ai-backend.js runs)</td></tr>
+                <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>serverUrl</code></td><td style="padding:.5rem"><em>auto-detected</em></td><td style="padding:.5rem">Your chat server URL — auto-detected from script src if omitted</td></tr>
                 <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>dealerName</code></td><td style="padding:.5rem">Carson Exports</td><td style="padding:.5rem">Dealership name shown in the chat header</td></tr>
                 <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>primaryColor</code></td><td style="padding:.5rem">#1e6fff</td><td style="padding:.5rem">Accent color for buttons, links, and the chat bubble</td></tr>
                 <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>position</code></td><td style="padding:.5rem">bottom-right</td><td style="padding:.5rem"><code>bottom-right</code> or <code>bottom-left</code></td></tr>

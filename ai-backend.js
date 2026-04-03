@@ -1494,6 +1494,15 @@ app.post('/api/sync-inventory', async (req, res) => {
 });
 
 /**
+ * Ensure widget JS is served with CORS headers for cross-origin embedding
+ */
+app.get('/chat-widget.js', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  next();
+});
+
+/**
  * Serve static files (index.html)
  */
 app.use(express.static(__dirname));

@@ -5,30 +5,48 @@
  *
  *   <script>
  *   window.DealerAIConfig = {
- *     serverUrl: "https://chat.carsonexports.com",
+ *     serverUrl: "https://carsons.shawnryder.com",
  *     dealerName: "Carson Exports"
  *   };
  *   </script>
- *   <script src="https://chat.carsonexports.com/chat-widget.js" defer></script>
+ *   <script src="https://carsons.shawnryder.com/chat-widget.js" defer crossorigin="anonymous"></script>
  *
  * Conversation persists across page navigation via sessionStorage.
  * Reads current page context to provide relevant, page-aware responses.
  */
 (function() {
   'use strict';
+  try {
 
   // =====================================================
   // 1. CONFIGURATION
   // =====================================================
   const userConfig = window.DealerAIConfig || {};
+
+  // Auto-detect serverUrl from the script's own src if not provided
+  function detectServerUrl() {
+    if (userConfig.serverUrl) return userConfig.serverUrl.replace(/\/$/, '');
+    const scripts = document.querySelectorAll('script[src*="chat-widget"]');
+    for (const s of scripts) {
+      try {
+        const url = new URL(s.src);
+        return url.origin;
+      } catch(e) {}
+    }
+    console.warn('[DealerAI] Could not detect serverUrl — set window.DealerAIConfig.serverUrl');
+    return '';
+  }
+
   const CONFIG = {
-    serverUrl:    (userConfig.serverUrl || '').replace(/\/$/, ''),
+    serverUrl:    detectServerUrl(),
     dealerName:   userConfig.dealerName   || 'Carson Exports',
     primaryColor: userConfig.primaryColor || '#1e6fff',
     position:     userConfig.position     || 'bottom-right',
     theme:        userConfig.theme        || 'light',
     greeting:     userConfig.greeting     || null
   };
+
+  console.log('[DealerAI] Widget loading...', { serverUrl: CONFIG.serverUrl, dealerName: CONFIG.dealerName });
 
   const STORAGE = 'dealerAI_';
 
@@ -922,11 +940,16 @@ ${themeBlock}
   // 15. INITIALIZATION
   // =====================================================
   function init() {
+    console.log('[DealerAI] Widget initializing...', { serverUrl: CONFIG.serverUrl, dealerName: CONFIG.dealerName });
     loadFontAwesome();
     loadFont();
     injectCSS();
     buildHTML();
-    loadSettings();
+    loadSettings().then(() => {
+      console.log('[DealerAI] Ready — chat bubble visible');
+    }).catch(() => {
+      console.log('[DealerAI] Ready (settings load skipped) — chat bubble visible');
+    });
 
     // Restore previous session state
     const hasState = sessionStorage.getItem(STORAGE + 'chatState');
@@ -967,4 +990,7 @@ ${themeBlock}
     }
   };
 
+  } catch(e) {
+    console.error('[DealerAI] Widget failed to initialize:', e);
+  }
 })();
