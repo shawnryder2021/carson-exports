@@ -1693,10 +1693,23 @@ function showAIResponseWithCards(ai, quickReplies) {
   showQuickReplies(quickReplies);
 }
 
+function linkifyUrls(text) {
+  // Convert plain URLs to clickable links, but skip URLs already inside <a> tags
+  return text.replace(/(https?:\/\/[^\s<>"']+)/g, function(url, _, offset) {
+    // Check if this URL is already inside an href="" or <a> tag
+    const before = text.substring(Math.max(0, offset - 10), offset);
+    if (/href=["']$/.test(before) || /href=["']/.test(before)) return url;
+    return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all">${url}</a>`;
+  });
+}
+
 function addBotMessage(html) {
   // Track plain-text version in conversation history for AI context
   const plainText = html.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').trim();
   if (plainText) chatHistory.push({ role: 'assistant', content: plainText });
+
+  // Auto-linkify any plain URLs in the response
+  html = linkifyUrls(html);
 
   const msgs = document.getElementById('chatMessages');
   const div = document.createElement('div');

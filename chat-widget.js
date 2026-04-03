@@ -543,9 +543,19 @@ ${themeBlock}
     processMessage(text);
   }
 
+  function linkifyUrls(text) {
+    return text.replace(/(https?:\/\/[^\s<>"']+)/g, function(url, _, offset) {
+      const before = text.substring(Math.max(0, offset - 10), offset);
+      if (/href=["']$/.test(before) || /href=["']/.test(before)) return url;
+      return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--dai-accent);word-break:break-all">${url}</a>`;
+    });
+  }
+
   function addBotMessage(html) {
     const plainText = html.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').trim();
     if (plainText) chatHistory.push({ role: 'assistant', content: plainText });
+
+    html = linkifyUrls(html);
 
     const msgs = document.getElementById('dai-messages');
     const div = document.createElement('div');
