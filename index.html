@@ -596,6 +596,7 @@ tr:hover td{background:var(--accent-glow)}
               <div class="form-group"><label>CRM Email Address (ADF)</label><input type="email" id="settingCRM" value="carsonexportsleads@gmail.com" placeholder="crm@dealership.com"></div>
               <div class="form-group"><label>Webhook URL</label><input type="url" id="settingWebhook" value="https://crm.carsonexports.com/api/webhook/leads" placeholder="https://..."></div>
             </div>
+            <div class="form-group"><label>Trade-In Evaluation Form URL</label><input type="url" id="settingTradeInUrl" value="https://www.carsonexports.com/en/form/exchange-evaluation-new/4" placeholder="https://..."></div>
             <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> Save Settings</button>
           </div>
         </div>
@@ -636,6 +637,28 @@ Q: Do you accept trade-ins? A: Absolutely! We offer fair market value on all tra
 Q: Is there a warranty? A: Many of our vehicles come with remaining manufacturer warranty. Ask about our extended warranty options.
 Q: Do you deliver? A: We offer delivery within the Maritime provinces for a small fee.
 Q: Can I get a vehicle history report? A: Yes, we provide a free Carfax report with every vehicle.</textarea></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">Chat Quick Replies</div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Main Menu Quick Replies</label>
+              <small style="display:block;color:#666;margin-bottom:6px">One option per line. These appear as buttons when the chat starts.</small>
+              <textarea id="aiQuickReplies" rows="6">Book a Service Appointment
+Ask About a Vehicle
+Speak With Sales
+Check Inventory
+Get Trade-In Value</textarea>
+            </div>
+            <div class="form-group">
+              <label>Post-Conversation Quick Replies</label>
+              <small style="display:block;color:#666;margin-bottom:6px">Shown after completing an inquiry or returning to menu.</small>
+              <textarea id="aiPostReplies" rows="4">Book a Service Appointment
+Ask About a Vehicle
+Check Inventory
+Get Trade-In Value</textarea>
+            </div>
             <button class="btn btn-primary" onclick="saveAISettings()"><i class="fas fa-save"></i> Save AI Settings</button>
           </div>
         </div>
@@ -672,33 +695,67 @@ Q: Can I get a vehicle history report? A: Yes, we provide a free Carfax report w
       <!-- EMBED CODE -->
       <div class="admin-section" id="section-embed">
         <h1 class="admin-page-title">Embed Code</h1>
-        <p class="admin-page-desc">Add the AI chat widget to any website with this embed snippet</p>
+        <p class="admin-page-desc">Add the AI chat widget to any website — just paste into the &lt;head&gt; tag</p>
         <div class="card">
-          <div class="card-header">JavaScript Embed Snippet <button class="btn btn-sm btn-outline" onclick="copyEmbed()"><i class="fas fa-copy"></i> Copy</button></div>
+          <div class="card-header">Embed Snippet <button class="btn btn-sm btn-outline" onclick="copyEmbed()"><i class="fas fa-copy"></i> Copy</button></div>
           <div class="card-body">
-            <div class="code-block" id="embedCode">&lt;!-- Dealer AI Chat Widget --&gt;
+            <div class="code-block" id="embedCode">&lt;!-- Carson Exports AI Chat Widget --&gt;
 &lt;script&gt;
-  window.DealerAIConfig = {
-    dealershipId: "dave-forde-auto",
-    apiKey: "df_live_xxxxxxxxxxxxxxxx",
-    primaryColor: "#1e6fff",
-    dealerName: "Carson Exports",
-    afterHoursTime: "20:00",
-    webhookUrl: "https://crm.carsonexports.com/api/webhook/leads",
-    crmEmail: "carsonexportsleads@gmail.com",
-    position: "bottom-right",
-    theme: "auto"
-  };
+window.DealerAIConfig = {
+  serverUrl: "https://chat.carsonexports.com",
+  dealerName: "Carson Exports",
+  primaryColor: "#1e6fff",
+  position: "bottom-right",
+  theme: "auto"
+};
 &lt;/script&gt;
-&lt;script src="https://cdn.dealerai.com/v1/chat-widget.js" async&gt;&lt;/script&gt;</div>
-            <p style="margin-top:1rem;font-size:.8rem;color:var(--text-muted)"><i class="fas fa-info-circle"></i> Place this code before the closing <code>&lt;/body&gt;</code> tag on any page where you want the chat widget to appear. The widget will automatically load and connect to your dealership configuration.</p>
+&lt;script src="https://chat.carsonexports.com/chat-widget.js" defer&gt;&lt;/script&gt;</div>
+            <div style="margin-top:1rem;font-size:.8rem;color:var(--text-muted)">
+              <p><i class="fas fa-info-circle"></i> Paste this into the <code>&lt;head&gt;</code> section of any page. The widget loads everything automatically — no other files needed.</p>
+              <div style="margin-top:.75rem;padding:.75rem;background:var(--card-alt);border-radius:var(--radius-sm);border:1px solid var(--border)">
+                <strong style="font-size:.78rem">Features:</strong>
+                <ul style="margin:.4rem 0 0 1.2rem;font-size:.78rem;line-height:1.8">
+                  <li><strong>Conversation persists</strong> across page navigation — uses sessionStorage</li>
+                  <li><strong>Page-aware AI</strong> — reads the current page to give contextual responses</li>
+                  <li><strong>Vehicle detail pages</strong> — auto-detects vehicle info and greets accordingly</li>
+                  <li><strong>All settings from admin panel</strong> — quick replies, FAQ, trade-in URL sync automatically</li>
+                  <li><strong>Mobile responsive</strong> — goes full-screen on small devices</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
         <div class="card">
-          <div class="card-header">WordPress Plugin (Coming Soon)</div>
-          <div class="card-body" style="text-align:center;padding:2rem;color:var(--text-muted)">
-            <i class="fab fa-wordpress" style="font-size:2.5rem;margin-bottom:.75rem;display:block;opacity:.3"></i>
-            <p style="font-size:.85rem">WordPress plugin is under development.<br>Use the JavaScript embed in the meantime.</p>
+          <div class="card-header">Configuration Options</div>
+          <div class="card-body">
+            <table style="width:100%;font-size:.8rem;border-collapse:collapse">
+              <thead><tr style="text-align:left;border-bottom:2px solid var(--border)"><th style="padding:.5rem">Option</th><th style="padding:.5rem">Default</th><th style="padding:.5rem">Description</th></tr></thead>
+              <tbody>
+                <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>serverUrl</code></td><td style="padding:.5rem"><em>required</em></td><td style="padding:.5rem">Your chat server URL (where ai-backend.js runs)</td></tr>
+                <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>dealerName</code></td><td style="padding:.5rem">Carson Exports</td><td style="padding:.5rem">Dealership name shown in the chat header</td></tr>
+                <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>primaryColor</code></td><td style="padding:.5rem">#1e6fff</td><td style="padding:.5rem">Accent color for buttons, links, and the chat bubble</td></tr>
+                <tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><code>position</code></td><td style="padding:.5rem">bottom-right</td><td style="padding:.5rem"><code>bottom-right</code> or <code>bottom-left</code></td></tr>
+                <tr><td style="padding:.5rem"><code>theme</code></td><td style="padding:.5rem">light</td><td style="padding:.5rem"><code>light</code>, <code>dark</code>, or <code>auto</code> (follows user's OS setting)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">JavaScript API</div>
+          <div class="card-body" style="font-size:.8rem">
+            <p style="margin-bottom:.5rem">After the widget loads, you can control it programmatically:</p>
+            <div class="code-block" style="font-size:.78rem">DealerAI.open()        // Open the chat window
+DealerAI.close()       // Close the chat window
+DealerAI.reset()       // Clear conversation and start fresh
+DealerAI.sendMessage("I need help with financing")  // Send a message programmatically</div>
+            <p style="margin-top:.75rem;color:var(--text-muted)"><i class="fas fa-lightbulb"></i> Use <code>DealerAI.sendMessage()</code> to trigger the chat from custom buttons, e.g. a "Chat about this vehicle" button on a listing page.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">WordPress / Shopify</div>
+          <div class="card-body" style="font-size:.85rem;color:var(--text-muted)">
+            <p><i class="fab fa-wordpress" style="margin-right:.5rem"></i> <strong>WordPress:</strong> Paste the embed code into <em>Appearance &gt; Theme Editor &gt; header.php</em> or use a plugin like "Insert Headers and Footers".</p>
+            <p style="margin-top:.5rem"><i class="fab fa-shopify" style="margin-right:.5rem"></i> <strong>Shopify:</strong> Go to <em>Online Store &gt; Themes &gt; Edit Code &gt; theme.liquid</em> and paste before <code>&lt;/head&gt;</code>.</p>
           </div>
         </div>
       </div>
@@ -1096,27 +1153,18 @@ function checkAfterHours() {
 function startChat() {
   chatSessionCount++;
   updateStats();
-  isAfterHours = checkAfterHours();
+  isAfterHours = false; // AI chat is available 24/7
   const statusBar = document.getElementById('chatStatusBar');
 
-  if (isAfterHours) {
-    statusBar.className = 'chat-status-bar closed-status';
-    statusBar.innerHTML = '<i class="fas fa-moon" style="font-size:.5rem;vertical-align:middle"></i> After hours — AI assistant available';
-    document.getElementById('chatOnlineStatus').textContent = 'After Hours Mode';
-    showTyping(() => {
-      addBotMessage("Hi there! 👋 We're currently closed, but I can still help you.\n\nI can book an appointment for you, and our team will confirm it first thing in the morning.\n\nLet's get started — what's your <strong>full name</strong>?");
-      chatState = 'ah_name';
-      currentLead = {source:'After-Hours Chat', afterHours:true, submittedAt:new Date().toISOString()};
-    });
-  } else {
-    statusBar.className = 'chat-status-bar open-status';
-    statusBar.innerHTML = '<i class="fas fa-circle" style="font-size:.4rem;vertical-align:middle;color:#22c55e"></i> We\'re open! Chat with us now';
-    showTyping(() => {
-      addBotMessage("Hi! 👋 Welcome to <strong>Carson Exports</strong>. I'm your AI assistant and I'm here to help.\n\nWhat can I do for you today?");
-      chatState = 'menu';
-      showQuickReplies(['Book a Service Appointment', 'Ask About a Vehicle', 'Speak With Sales', 'Check Inventory']);
-    });
-  }
+  statusBar.className = 'chat-status-bar open-status';
+  statusBar.innerHTML = '<i class="fas fa-circle" style="font-size:.4rem;vertical-align:middle;color:#22c55e"></i> AI assistant available 24/7';
+  document.getElementById('chatOnlineStatus').textContent = 'Online';
+  showTyping(() => {
+    addBotMessage("Hi! 👋 Welcome to <strong>Carson Exports</strong>. I'm your AI assistant and I'm here to help.\n\nWhat can I do for you today?");
+    chatState = 'menu';
+    currentLead = {source:'Website Chat', afterHours:false, submittedAt:new Date().toISOString()};
+    showQuickReplies(getMenuReplies());
+  });
 }
 
 function sendUserMessage() {
@@ -1192,7 +1240,7 @@ function processMessage(text) {
       showTyping(() => { showAppointmentConfirmation(); });
       break;
     case 'complete':
-      showTyping(() => { addBotMessage("Is there anything else I can help you with?"); chatState = 'menu'; showQuickReplies(['Book a Service Appointment', 'Ask About a Vehicle', 'Check Inventory']); });
+      showTyping(() => { addBotMessage("Is there anything else I can help you with?"); chatState = 'menu'; showQuickReplies(getPostReplies()); });
       break;
     default:
       showTyping(() => { handleFreeText(text); });
@@ -1223,6 +1271,12 @@ function processMenuChoice(choice) {
       addBotMessage("Here's a quick overview of our inventory:\n\n• <strong>" + INVENTORY.length + " vehicles</strong> in stock\n• <strong>Brands:</strong> " + makes.join(', ') + "\n• <strong>Price range:</strong> $" + Math.min(...INVENTORY.map(v=>v.price)).toLocaleString() + " — $" + Math.max(...INVENTORY.map(v=>v.price)).toLocaleString() + " CAD\n\nWhat type of vehicle are you interested in?");
       chatState = 'inventory_search';
       showQuickReplies(['SUVs', 'Sedans', 'Trucks', 'Under $30K', 'Toyota', 'Show me everything']);
+    });
+  } else if (choice.includes('trade')) {
+    const tradeUrl = document.getElementById('settingTradeInUrl')?.value || 'https://www.carsonexports.com/en/form/exchange-evaluation-new/4';
+    showTyping(() => {
+      addBotMessage(`Great! We'd love to help you get a value for your trade-in.\n\nYou can submit your vehicle details for a free evaluation using our online form:\n\n<a href="${tradeUrl}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;text-decoration:underline">Submit Trade-In Evaluation</a>\n\nOur team will review your submission and get back to you with a fair market value.\n\nHave questions about the process? Just ask!`);
+      showQuickReplies(['Browse Inventory', 'Book a Test Drive', 'Ask Another Question', 'Back to Menu']);
     });
   } else {
     handleFreeText(choice);
@@ -1269,24 +1323,46 @@ function processVehicleInterest(text) {
     chatState = 'menu';
     showTyping(() => {
       addBotMessage("No problem! What else can I help you with?");
-      showQuickReplies(['Book a Service Appointment', 'Ask About a Vehicle', 'Speak With Sales', 'Check Inventory']);
+      showQuickReplies(getMenuReplies());
     });
   } else if (text.match(/#(\d)/)) {
     const idx = parseInt(text.match(/#(\d)/)[1]) - 1;
-    // Assume they picked from last results — just respond helpfully
     showTyping(() => {
       addBotMessage("Great pick! Would you like to book a test drive or get more details?");
       showQuickReplies(['Book a Test Drive', 'More Details', 'Back to Menu']);
     });
+  } else if (/\b(link|url|listing|web\s?site|page|send.*(it|me|link)|where.*(find|see|view)|share)\b/i.test(text)) {
+    // User is asking for a link to the vehicle listing
+    if (selectedVehicle && selectedVehicle.link) {
+      showTyping(() => {
+        addBotMessage(`Here's the link to the <strong>${selectedVehicle.title}</strong>:\n\n<a href="${selectedVehicle.link}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;word-break:break-all">${selectedVehicle.link}</a>\n\n` + chatVehicleCard(selectedVehicle));
+        showQuickReplies(['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
+      });
+    } else {
+      showTyping(() => {
+        addBotMessage("I don't have a direct link for that vehicle right now, but I can help you with more details or book a test drive!");
+        showQuickReplies(['Book a Test Drive', 'More Details', 'Browse Inventory', 'Back to Menu']);
+      });
+    }
   } else {
-    // Let AI handle any question the user asks about the vehicle or dealership
-    showTyping(async () => {
-      const vehicleContext = selectedVehicle
-        ? `The customer is currently looking at a ${selectedVehicle.title} priced at $${selectedVehicle.price.toLocaleString()} CAD. `
-        : '';
-      const ai = await callAI(vehicleContext + text, 'vehicle_interest');
-      showAIResponseWithCards(ai, ['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
-    });
+    // Check if user is searching for a NEW vehicle category (not asking about current vehicle)
+    const isNewSearch = /\b(suvs?|sedans?|trucks?|vans?|coupes?|hatchbacks?|wagons?|convertibles?|toyotas?|fords?|hondas?|nissans?|hyundais?|audis?|bmws?|kias?|mazdas?|chevrolets?|rams?|volkswagens?|inventory|stock|browse|show me)\b/i.test(text);
+    const isNonVehicleTopic = /\b(financ|loan|payment|apr|interest rate|credit|lease|trade.?in|warranty|service|hour|price match|insur|registr)\b/i.test(text);
+
+    if (isNewSearch && !isNonVehicleTopic) {
+      chatState = 'inventory_search';
+      processInventorySearch(text);
+    } else {
+      // General question — AI answers with current vehicle context including link
+      showTyping(async () => {
+        const vehicleContext = selectedVehicle
+          ? `The customer is currently looking at a ${selectedVehicle.title} priced at $${selectedVehicle.price.toLocaleString()} CAD. Listing link: ${selectedVehicle.link || 'not available'}. `
+          : '';
+        const ai = await callAI(vehicleContext + text, 'vehicle_interest', text);
+        addBotMessage(ai.response);
+        showQuickReplies(['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
+      });
+    }
   }
 }
 
@@ -1321,10 +1397,20 @@ function processAfterHoursFlow(text) {
 }
 
 function handleFreeText(text) {
-  // ALL free-text goes through OpenAI with full inventory + admin settings context.
-  // Only show vehicle cards if the user is clearly asking about vehicles.
   const lower = text.toLowerCase();
-  const isVehicleQuery = /\b(cars?|vehicles?|suvs?|sedans?|trucks?|vans?|autos?|toyotas?|fords?|hondas?|nissans?|hyundais?|audis?|bmws?|kias?|mazdas?|chevrolets?|rams?|volkswagens?|inventory|stock|available|civic|altima|rav4|camry|corolla|tucson|tiguan|kicks|qashqai|elantra|explorer)\b/i.test(lower);
+
+  // If user asks for a link and we have a selected vehicle, share it directly
+  if (/\b(link|url|listing|send.*(it|me|link)|where.*(find|see|view)|share)\b/i.test(lower) && selectedVehicle && selectedVehicle.link) {
+    showTyping(() => {
+      addBotMessage(`Here's the link to the <strong>${selectedVehicle.title}</strong>:\n\n<a href="${selectedVehicle.link}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;word-break:break-all">${selectedVehicle.link}</a>\n\n` + chatVehicleCard(selectedVehicle));
+      showQuickReplies(['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
+    });
+    return;
+  }
+
+  // Only show vehicle cards if the user is clearly asking about vehicles.
+  const isNonVehicleTopic = /\b(financ|loan|payment|apr|interest rate|credit|lease|trade.?in|warranty|service|hour|price match|insur|registr)\b/i.test(lower);
+  const isVehicleQuery = !isNonVehicleTopic && /\b(cars?|vehicles?|suvs?|sedans?|trucks?|vans?|autos?|toyotas?|fords?|hondas?|nissans?|hyundais?|audis?|bmws?|kias?|mazdas?|chevrolets?|rams?|volkswagens?|inventory|stock|available|civic|altima|rav4|camry|corolla|tucson|tiguan|kicks|qashqai|elantra|explorer)\b/i.test(lower);
 
   showTyping(async () => {
     const state = chatState === 'idle' ? 'menu' : chatState;
@@ -1373,7 +1459,7 @@ function showAppointmentConfirmation() {
     } else if (l.includes('cancel')) {
       addBotMessage("Appointment cancelled. Is there anything else I can help with?");
       chatState = 'menu';
-      showQuickReplies(['Book a Service Appointment', 'Ask About a Vehicle', 'Check Inventory']);
+      showQuickReplies(getPostReplies());
     }
     window._confirmHandler = null;
   };
@@ -1536,7 +1622,7 @@ function chatVehicleCard(v) {
  * Returns { response, vehicles } — AI text + matching vehicle objects for card rendering.
  * Falls back gracefully if the backend is unavailable.
  */
-async function callAI(userMessage, state) {
+async function callAI(userMessage, state, vehicleQuery) {
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -1545,7 +1631,7 @@ async function callAI(userMessage, state) {
         messages: chatHistory.slice(-12),
         userMessage,
         chatState: state || chatState,
-        vehicleQuery: userMessage,
+        vehicleQuery: vehicleQuery || userMessage,
         dealershipSettings: currentSettings
       })
     });
@@ -1565,19 +1651,42 @@ async function callAI(userMessage, state) {
 }
 
 /**
- * Show an AI response with optional vehicle cards.
- * If the AI returned matching vehicles, render up to 3 as chat cards.
+ * Compact vehicle link for multi-result lists (no images, just key info + link).
+ */
+function chatVehicleLink(v) {
+  const link = v.link ? `<a href="${v.link}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;text-decoration:none;font-size:.75rem"><i class="fas fa-external-link-alt"></i> View</a>` : '';
+  return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.55rem .75rem;margin:.3rem 0;background:var(--card-alt);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer" onclick="if(event.target.tagName!=='A')openChatAboutVehicle('${v.vin}')">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.year} ${v.make} ${v.model}</div>
+      <div style="font-size:.72rem;color:var(--text-muted)">${v.mileage ? v.mileage.toLocaleString() + ' km' : ''} ${v.bodyStyle ? '· ' + v.bodyStyle : ''}</div>
+    </div>
+    <div style="text-align:right;margin-left:.75rem;flex-shrink:0">
+      <div style="font-weight:700;color:var(--accent);font-size:.85rem">$${v.price.toLocaleString()}</div>
+      ${link}
+    </div>
+  </div>`;
+}
+
+/**
+ * Show an AI response with smart vehicle display:
+ * - Single vehicle: full card with image
+ * - Multiple vehicles: compact link rows (no images)
  */
 function showAIResponseWithCards(ai, quickReplies) {
   let msg = ai.response;
   if (ai.vehicles && ai.vehicles.length > 0) {
-    const show = ai.vehicles.slice(0, 3);
-    msg += '\n\n' + show.map(v => chatVehicleCard(v)).join('');
-    if (ai.vehicles.length > 3) {
-      msg += `\n<span style="font-size:.78rem;color:#666">...and <strong>${ai.vehicles.length - 3} more</strong> in stock.</span>`;
+    if (ai.vehicles.length === 1) {
+      // Single result — full card with image
+      msg += '\n\n' + chatVehicleCard(ai.vehicles[0]);
+    } else {
+      // Multiple results — compact links (no images)
+      const show = ai.vehicles.slice(0, 5);
+      msg += '\n\n' + show.map(v => chatVehicleLink(v)).join('');
+      if (ai.vehicles.length > 5) {
+        msg += `<div style="font-size:.72rem;color:#666;padding:.3rem 0">...and <strong>${ai.vehicles.length - 5} more</strong> in stock</div>`;
+      }
     }
-    // Set selectedVehicle to first match so Book a Test Drive works
-    selectedVehicle = show[0];
+    selectedVehicle = ai.vehicles[0];
     chatState = 'vehicle_interest';
   }
   addBotMessage(msg);
@@ -1650,6 +1759,22 @@ function suggestDates() {
     }
   }
   showQuickReplies(dates.slice(0, 4));
+}
+
+function getMenuReplies() {
+  const textarea = document.getElementById('aiQuickReplies');
+  if (textarea && textarea.value.trim()) {
+    return textarea.value.trim().split('\n').filter(l => l.trim());
+  }
+  return ['Book a Service Appointment', 'Ask About a Vehicle', 'Speak With Sales', 'Check Inventory', 'Get Trade-In Value'];
+}
+
+function getPostReplies() {
+  const textarea = document.getElementById('aiPostReplies');
+  if (textarea && textarea.value.trim()) {
+    return textarea.value.trim().split('\n').filter(l => l.trim());
+  }
+  return ['Book a Service Appointment', 'Ask About a Vehicle', 'Check Inventory', 'Get Trade-In Value'];
 }
 
 function escapeHtml(str) {
@@ -1838,6 +1963,15 @@ async function loadSettings() {
     if (s.afterHoursTime) document.getElementById('settingAfterHours') && (document.getElementById('settingAfterHours').value = s.afterHoursTime);
     if (s.crmEmail)       document.getElementById('settingCRM').value     = s.crmEmail;
     if (s.webhookUrl)     document.getElementById('settingWebhook').value = s.webhookUrl;
+    if (s.tradeInUrl)     document.getElementById('settingTradeInUrl').value = s.tradeInUrl;
+    // Populate AI Knowledge fields
+    if (s.faqKnowledge)      document.getElementById('aiFAQ').value = s.faqKnowledge;
+    if (s.services)          document.getElementById('aiServices').value = s.services;
+    if (s.brands)            document.getElementById('aiBrands').value = s.brands;
+    if (s.appointmentRules)  document.getElementById('aiRules').value = s.appointmentRules;
+    if (s.responseTone)      document.getElementById('aiTone').value = s.responseTone;
+    if (s.quickReplies)      document.getElementById('aiQuickReplies').value = s.quickReplies;
+    if (s.postReplies)       document.getElementById('aiPostReplies').value = s.postReplies;
     applySettingsToUI(s);
   } catch (e) { /* backend may not be running in static preview */ }
 }
@@ -1862,7 +1996,8 @@ async function saveSettings() {
     hours:          document.getElementById('settingHours').value,
     afterHoursTime: document.getElementById('settingAfterHours') ? document.getElementById('settingAfterHours').value : '20:00',
     crmEmail:       document.getElementById('settingCRM').value,
-    webhookUrl:     document.getElementById('settingWebhook').value
+    webhookUrl:     document.getElementById('settingWebhook').value,
+    tradeInUrl:     document.getElementById('settingTradeInUrl').value
   };
   applySettingsToUI(payload);
   try {
@@ -1883,7 +2018,31 @@ async function saveSettings() {
   }
 }
 
-function saveAISettings() { showToast('AI Knowledge settings saved!'); }
+async function saveAISettings() {
+  const payload = {
+    services:         document.getElementById('aiServices').value,
+    brands:           document.getElementById('aiBrands').value,
+    appointmentRules: document.getElementById('aiRules').value,
+    responseTone:     document.getElementById('aiTone').value,
+    faqKnowledge:     document.getElementById('aiFAQ').value,
+    quickReplies:     document.getElementById('aiQuickReplies').value,
+    postReplies:      document.getElementById('aiPostReplies').value
+  };
+  try {
+    const res = await fetch('/api/admin-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      showToast('AI Knowledge settings saved to database ✓');
+    } else {
+      showToast('AI settings saved locally (DB unavailable)');
+    }
+  } catch (e) {
+    showToast('AI settings saved locally (offline mode)');
+  }
+}
 
 function showToast(msg) {
   const toast = document.createElement('div');

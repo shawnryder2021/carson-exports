@@ -58,7 +58,10 @@ let backendAdminSettings = {
   faqKnowledge:     '',
   crmEmail:         'carsonexportsleads@gmail.com',
   webhookUrl:       'https://crm.carsonexports.com/api/webhook/leads',
-  primaryColor:     '#1e6fff'
+  primaryColor:     '#1e6fff',
+  tradeInUrl:       'https://www.carsonexports.com/en/form/exchange-evaluation-new/4',
+  quickReplies:     'Book a Service Appointment\nAsk About a Vehicle\nSpeak With Sales\nCheck Inventory\nGet Trade-In Value',
+  postReplies:      'Book a Service Appointment\nAsk About a Vehicle\nCheck Inventory\nGet Trade-In Value'
 };
 
 /**
@@ -145,6 +148,10 @@ function mapSheetRowToVehicle(row) {
   const title = (row.title || '').trim();
   const titlePrefix = `${year} ${make} ${modelName}`.trim();
   const trim = title.startsWith(titlePrefix) ? title.slice(titlePrefix.length).trim() : '';
+  // Image URL — Google Sheets column is literally named "image[0].url"
+  const image = (row['image[0].url'] || '').trim();
+
+  let bodyStyle = (row.body_style || '').trim();
 
   return {
     id: row.vehicle_id || '',
@@ -156,8 +163,9 @@ function mapSheetRowToVehicle(row) {
     mileage,
     color: '',
     features: [],
+    image,
     url: (row.Link || '').trim(),
-    bodyStyle: (row.body_style || '').trim(),
+    bodyStyle,
     description: (row.Description || row.title || '').trim()
   };
 }
@@ -186,6 +194,8 @@ async function fetchInventoryFromSheets() {
 
     inventory = vehicles;
     console.log(`✅ Inventory synced: ${inventory.length} vehicles from Google Sheets`);
+    // Classify body styles for any vehicles missing them (runs in background)
+    classifyVehicleBodyStyles();
     return inventory;
   } catch (err) {
     console.warn('⚠️  Google Sheets fetch failed:', err.message);
@@ -193,11 +203,101 @@ async function fetchInventoryFromSheets() {
     try {
       inventory = JSON.parse(fs.readFileSync(path.join(__dirname, 'inventory.json'), 'utf8'));
       console.log(`📦 Loaded ${inventory.length} vehicles from inventory.json (fallback)`);
+      classifyVehicleBodyStyles();
     } catch (localErr) {
       console.warn('⚠️  Could not load inventory.json either:', localErr.message);
     }
     return inventory;
   }
+}
+
+/**
+ * Use OpenAI to classify body styles for vehicles that are missing them.
+ * Processes in batches of 30 to avoid token limits.
+ */
+async function classifyVehicleBodyStyles() {
+  const unclassified = inventory.filter(v => !v.bodyStyle);
+  if (unclassified.length === 0) {
+    console.log('✅ All vehicles already have body styles');
+    return;
+  }
+
+  // Wait for OPENAI_API_KEY to be available (it's defined later in the file)
+  await new Promise(r => setTimeout(r, 2000));
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.warn('⚠️  No OpenAI API key — skipping body style classification');
+    return;
+  }
+
+  console.log(`🔍 Classifying body styles for ${unclassified.length} vehicles via OpenAI...`);
+
+  // Process in batches of 30
+  const BATCH_SIZE = 30;
+  let classified = 0;
+
+  const validStyles = new Set(['SUV','Sedan','Truck','Van','Coupe','Hatchback','Wagon','Convertible']);
+
+  for (let i = 0; i < unclassified.length; i += BATCH_SIZE) {
+    const batch = unclassified.slice(i, i + BATCH_SIZE);
+    const vehicleList = batch.map((v, j) => `${j + 1}. ${v.year} ${v.make} ${v.model}`).join('\n');
+
+    try {
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: 'gpt-5.4-nano',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an automotive expert. Classify each vehicle into its correct body style. Reply ONLY with a JSON array of exactly ${batch.length} strings.
+
+Valid categories:
+- "SUV" = SUVs and crossovers (RAV4, CR-V, Tucson, Tiguan, Kicks, Qashqai, RVR, Q3, X5, etc.)
+- "Sedan" = 4-door sedans (Civic, Corolla, Camry, Accord, Altima, Elantra, Forte, Jetta, etc.)
+- "Truck" = pickup trucks ONLY (F-150, Silverado, RAM, Tacoma, Ranger, etc.)
+- "Coupe" = 2-door sports cars (Mustang, Camaro, 370Z, BRZ, Ferrari, Lamborghini, Porsche 911, etc.)
+- "Hatchback" = compact hatchbacks (Golf, Mazda3 Sport, Fit, Yaris, etc.)
+- "Wagon" = station wagons (Outback wagon, V60, Allroad, etc.)
+- "Van" = minivans and cargo vans (Sienna, Odyssey, Pacifica, Transit, etc.)
+- "Convertible" = convertible/roadster (Miata, Boxster, Mustang Convertible, etc.)
+
+IMPORTANT: Sports cars, exotics, and muscle cars are "Coupe" NOT "Truck". Pickup trucks have a cargo bed.`
+          },
+          {
+            role: 'user',
+            content: vehicleList
+          }
+        ],
+        temperature: 0,
+        max_completion_tokens: 800
+      }, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const content = response.data.choices[0].message.content.trim();
+      const classifications = JSON.parse(content.replace(/```json\n?|```/g, '').trim());
+
+      if (Array.isArray(classifications) && classifications.length >= batch.length) {
+        batch.forEach((v, j) => {
+          const style = classifications[j] || '';
+          v.bodyStyle = validStyles.has(style) ? style : '';
+        });
+        classified += batch.length;
+      } else {
+        console.warn(`⚠️  Batch ${Math.floor(i/BATCH_SIZE)+1}: expected ${batch.length}, got ${classifications?.length || 0}`);
+      }
+    } catch (err) {
+      const detail = err.response?.data?.error?.message || err.message;
+      console.warn(`⚠️  Batch ${Math.floor(i/BATCH_SIZE)+1} failed:`, detail);
+    }
+  }
+
+  console.log(`✅ Body styles classified for ${classified}/${unclassified.length} vehicles`);
+  const sample = unclassified.slice(0, 8).map(v => `${v.year} ${v.make} ${v.model} → ${v.bodyStyle}`);
+  console.log('   Sample:', sample.join(', '));
 }
 
 // Load inventory data (try Sheets first, fallback to JSON)
@@ -461,7 +561,8 @@ function generateSystemPrompt(dealershipSettings = {}, chatState = 'menu', recen
     brands: dealershipSettings.brands || 'Toyota, Honda, Nissan, Hyundai, Ford, Audi, BMW, Ferrari, McLaren, and more',
     appointmentRules: dealershipSettings.appointmentRules || 'Appointments available Mon-Sat. Service appointments in 30-min slots from 8AM-5PM. Sales appointments from 9AM-7PM. No Sunday appointments.',
     responseTone: dealershipSettings.responseTone || 'friendly',
-    faqKnowledge: dealershipSettings.faqKnowledge || ''
+    faqKnowledge: dealershipSettings.faqKnowledge || '',
+    tradeInUrl: dealershipSettings.tradeInUrl || backendAdminSettings.tradeInUrl || 'https://www.carsonexports.com/en/form/exchange-evaluation-new/4'
   };
 
   // Build tone instruction
@@ -567,6 +668,8 @@ DEALERSHIP INFORMATION:
 - Services: ${settings.services}
 - Brands: ${settings.brands}
 - Appointment Policy: ${settings.appointmentRules}
+- Trade-In Evaluation Form: ${settings.tradeInUrl}
+  When customers ask about trade-ins, mention we accept trade-ins with fair market value and direct them to submit details at this form link.
 
 RESPONDING TO DEALERSHIP INFORMATION QUESTIONS:
 When customers ask about hours, location, phone, services, financing, trade-ins, or other dealership details, answer directly and accurately using the information above. Examples:
@@ -599,7 +702,12 @@ CRITICAL RULES:
 - Keep the conversation natural and helpful
 
 TONE: ${toneInstruction}
+${settings.faqKnowledge ? `
+FAQ KNOWLEDGE BASE (use these to answer common questions accurately):
+${settings.faqKnowledge}
 
+When a customer asks a question that matches an FAQ topic, use the FAQ answer as your primary source but respond naturally in your own words. If the question is not covered by FAQ, use your general knowledge about car dealerships.
+` : ''}
 FORMAT: Plain text only. Do NOT use markdown (no **bold**, no [links](url), no bullet lists with •). The chat widget renders HTML separately — your job is to write natural conversational text. Keep responses concise (2-4 sentences max unless detailed info was requested).
 
 Remember: This is a natural conversation between a helpful AI and a customer. Respond like you're talking to a friend, not filling out a form.`;
@@ -843,7 +951,7 @@ function searchInventory(query, limit = 4) {
     return false;
   }
 
-  // Score each vehicle
+  // Score each vehicle — track strong (make/model) vs weak (general) matches separately
   const scored = inventory.map(v => {
     const makeLower = (v.make || '').toLowerCase();
     const modelLower = (v.model || '').toLowerCase();
@@ -853,30 +961,59 @@ function searchInventory(query, limit = 4) {
     ].join(' ').toLowerCase();
 
     let score = 0;
+    let hasModelMatch = false;
+    let hasMakeMatch = false;
+    let hasBodyMatch = false;
     for (const term of terms) {
-      if (fuzzyMatch(makeLower, term)) score += 10;              // Strong make match
-      if (fuzzyMatch(modelLower, term)) score += 10;             // Strong model match
-      if (haystack.includes(term)) score += 3;                    // General match
-      // Also check stem against haystack
+      if (fuzzyMatch(makeLower, term)) { score += 10; hasMakeMatch = true; }
+      if (fuzzyMatch(modelLower, term)) { score += 10; hasModelMatch = true; }
+      if (haystack.includes(term)) score += 3;
       const stem = term.replace(/e?s$/, '');
       if (stem !== term && haystack.includes(stem)) score += 3;
-      // Price-based matching
       if (term.match(/^\d+k?$/) || term === 'under' || term === 'budget') {
         const num = parseInt(term.replace('k', '000'));
-        if (num > 1000 && v.price <= num * 1.15) score += 5;     // Within budget
+        if (num > 1000 && v.price <= num * 1.15) score += 5;
       }
-      // Body style matching (suv, sedan, truck, etc.)
       const bodyLower = (v.bodyStyle || '').toLowerCase();
-      if (fuzzyMatch(bodyLower, term)) score += 8;
+      if (fuzzyMatch(bodyLower, term)) { score += 8; hasBodyMatch = true; }
     }
-    return { vehicle: v, score };
+    return { vehicle: v, score, hasModelMatch, hasMakeMatch, hasBodyMatch };
   });
 
-  return scored
-    .filter(s => s.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(s => s.vehicle);
+  const sorted = scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score);
+
+  // Detect if query contains a body type term — if so, strictly require body match
+  const bodyTypeTerms = ['suv','suvs','sedan','sedans','truck','trucks','van','vans','coupe','coupes','hatchback','hatchbacks','wagon','wagons','convertible','convertibles','crossover','crossovers'];
+  const queryHasBodyType = terms.some(t => bodyTypeTerms.includes(t) || bodyTypeTerms.includes(t.replace(/e?s$/, '')));
+
+  // If any results have a specific model match, only return those model matches
+  // This prevents "show me a RAV4" from also returning Corollas, Camrys, etc.
+  const modelMatches = sorted.filter(s => s.hasModelMatch);
+  if (modelMatches.length > 0) {
+    return modelMatches.slice(0, limit).map(s => s.vehicle);
+  }
+
+  // If query mentions a body type, strictly filter to vehicles with matching body style
+  if (queryHasBodyType) {
+    const bodyMatches = sorted.filter(s => s.hasBodyMatch);
+    // If also has a make term, further filter by make
+    const makeMatches = bodyMatches.filter(s => s.hasMakeMatch);
+    if (makeMatches.length > 0) {
+      return makeMatches.slice(0, limit).map(s => s.vehicle);
+    }
+    if (bodyMatches.length > 0) {
+      return bodyMatches.slice(0, limit).map(s => s.vehicle);
+    }
+  }
+
+  // If any results match by make, prefer those over general fuzzy matches
+  const makeMatches = sorted.filter(s => s.hasMakeMatch);
+  if (makeMatches.length > 0) {
+    return makeMatches.slice(0, limit).map(s => s.vehicle);
+  }
+
+  // Otherwise fall back to all scored results
+  return sorted.slice(0, limit).map(s => s.vehicle);
 }
 
 /**
@@ -1088,7 +1225,8 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
       userMessage,
       chatState = 'menu',
       vehicleQuery,
-      dealershipSettings = {}
+      dealershipSettings = {},
+      pageContext = null
     } = req.body;
 
     // Validate input
@@ -1136,23 +1274,36 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
       systemPrompt += '\n\nRELEVANT VEHICLES IN STOCK:\n' + relevantVehicles.map(formatVehicleForPrompt).join('\n\n');
       systemPrompt += `\n\nCRITICAL RESPONSE FORMAT RULES:
 - The frontend will AUTOMATICALLY display vehicle photo cards with prices, links, and "Book Drive" buttons below your message.
-- Do NOT list vehicles with bullet points, numbered lists, or URLs in your text — the cards handle that.
+- Do NOT list vehicles with bullet points or numbered lists in your text — the cards handle that.
 - Instead, write a SHORT conversational reply (1-3 sentences) acknowledging what was found.
 - Example good response: "Great news! We have ${relevantVehicles.length} Nissan${relevantVehicles.length > 1 ? 's' : ''} in stock right now. Take a look and let me know if any catch your eye!"
 - Example BAD response: "1. **2022 Nissan Kicks** — $16,511 [View Details](https://...)" ← NEVER do this.
 - Do NOT use markdown formatting (no ** for bold, no []() links). Use plain text only.
+- EXCEPTION: If the customer specifically asks for a link, URL, or listing page, you SHOULD include the vehicle's link URL in your response as plain text.
 - Keep it friendly, brief, and let the vehicle cards do the heavy lifting.`;
+    }
+
+    // Inject page context from embedded widget (helps AI act contextually)
+    if (pageContext) {
+      systemPrompt += '\n\nPAGE CONTEXT (the customer is currently viewing this page on the dealership website):';
+      if (pageContext.url) systemPrompt += `\n- URL: ${pageContext.url}`;
+      if (pageContext.title) systemPrompt += `\n- Page Title: ${pageContext.title}`;
+      if (pageContext.description) systemPrompt += `\n- Description: ${pageContext.description}`;
+      if (pageContext.headings && pageContext.headings.length) systemPrompt += `\n- Key Headings: ${pageContext.headings.join('; ')}`;
+      if (pageContext.pageType) systemPrompt += `\n- Page Type: ${pageContext.pageType}`;
+      if (pageContext.vehicleInfo) systemPrompt += `\n- Vehicle on Page: ${JSON.stringify(pageContext.vehicleInfo)}`;
+      systemPrompt += '\nUse this page context to provide relevant, knowledgeable responses. Act like a dealership staff member who can see exactly what the customer is looking at. Reference specific details from the page when helpful.';
     }
 
     // Call OpenAI API
     const response = await axios.post(OPENAI_API_URL, {
-      model: 'gpt-4o-mini', // Fast and efficient model
+      model: 'gpt-5.4-nano', // Fast and efficient model
       messages: [
         { role: 'system', content: systemPrompt },
         ...conversationMessages
       ],
       temperature: 0.7,
-      max_tokens: 500,
+      max_completion_tokens: 500,
       top_p: 0.9
     }, {
       headers: {
@@ -1233,7 +1384,7 @@ app.get('/api/admin-settings', (req, res) => {
  * Called automatically when admin saves settings in the dashboard.
  */
 app.post('/api/admin-settings', async (req, res) => {
-  const allowed = ['dealershipName', 'dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'services', 'brands', 'appointmentRules', 'responseTone', 'faqKnowledge', 'crmEmail', 'webhookUrl', 'primaryColor'];
+  const allowed = ['dealershipName', 'dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'services', 'brands', 'appointmentRules', 'responseTone', 'faqKnowledge', 'crmEmail', 'webhookUrl', 'primaryColor', 'tradeInUrl', 'quickReplies', 'postReplies'];
   const updated = {};
   allowed.forEach(key => {
     if (req.body[key] !== undefined) {
@@ -1262,7 +1413,15 @@ app.get('/api/settings', async (req, res) => {
     afterHoursTime:   backendAdminSettings.afterHoursTime || '20:00',
     crmEmail:         backendAdminSettings.crmEmail,
     webhookUrl:       backendAdminSettings.webhookUrl,
-    primaryColor:     backendAdminSettings.primaryColor || '#1e6fff'
+    primaryColor:     backendAdminSettings.primaryColor || '#1e6fff',
+    tradeInUrl:       backendAdminSettings.tradeInUrl || 'https://www.carsonexports.com/en/form/exchange-evaluation-new/4',
+    quickReplies:     backendAdminSettings.quickReplies || '',
+    postReplies:      backendAdminSettings.postReplies || '',
+    faqKnowledge:     backendAdminSettings.faqKnowledge || '',
+    services:         backendAdminSettings.services || '',
+    brands:           backendAdminSettings.brands || '',
+    appointmentRules: backendAdminSettings.appointmentRules || '',
+    responseTone:     backendAdminSettings.responseTone || 'friendly'
   });
 });
 
@@ -1271,7 +1430,7 @@ app.get('/api/settings', async (req, res) => {
  * Save dealership settings from the frontend settings form
  */
 app.post('/api/settings', async (req, res) => {
-  const allowed = ['dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'crmEmail', 'webhookUrl', 'primaryColor'];
+  const allowed = ['dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'crmEmail', 'webhookUrl', 'primaryColor', 'tradeInUrl', 'quickReplies', 'postReplies'];
   const updated = {};
   allowed.forEach(key => {
     if (req.body[key] !== undefined) {
@@ -1283,6 +1442,45 @@ app.post('/api/settings', async (req, res) => {
   await saveAllSettingsToDB(updated);
   console.log('💾 Dealership settings saved to Supabase:', Object.keys(updated).join(', '));
   res.json({ success: true, settings: updated });
+});
+
+/**
+ * POST /api/submit-lead
+ * Accepts lead submissions from the embeddable chat widget.
+ * Persists to Supabase and triggers webhook/email notifications.
+ */
+app.post('/api/submit-lead', chatLimiter, async (req, res) => {
+  try {
+    const { name, email, phone, department, date, time, vehicleInterest, source, pageContext } = req.body;
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'Name and phone are required' });
+    }
+    const lead = {
+      name, email, phone, department, date, time,
+      vehicle_interest: vehicleInterest || '',
+      source: source || 'Chat Widget',
+      page_url: pageContext?.url || '',
+      created_at: new Date().toISOString()
+    };
+    // Persist to Supabase if available
+    if (supabase) {
+      try {
+        await supabase.from('ce_leads').insert(lead);
+      } catch (dbErr) {
+        console.error('Lead DB insert error:', dbErr.message);
+      }
+    }
+    // Trigger webhook if configured
+    const webhookUrl = backendAdminSettings.webhookUrl;
+    if (webhookUrl) {
+      axios.post(webhookUrl, lead).catch(err => console.error('Webhook error:', err.message));
+    }
+    console.log('📋 Lead submitted via widget:', name, phone, department || 'General');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Submit lead error:', error.message);
+    res.status(500).json({ error: 'Failed to submit lead' });
+  }
 });
 
 /**
@@ -1575,14 +1773,14 @@ app.post('/api/sms-chat', smsLimiter, async (req, res) => {
     // CALL OPENAI API
     // ======================
     const response = await axios.post(OPENAI_API_URL, {
-      model: 'gpt-4o-mini',
+      model: 'gpt-5.4-nano',
       messages: [
         { role: 'system', content: systemPrompt },
         ...smsLead.smsHistory,
         { role: 'user', content: message }
       ],
       temperature: 0.7,
-      max_tokens: 500,
+      max_completion_tokens: 500,
       top_p: 0.9
     }, {
       headers: {
