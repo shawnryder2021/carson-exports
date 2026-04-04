@@ -2299,6 +2299,344 @@ app.delete('/api/sms-lead/:phone', (req, res) => {
   res.json({ success: true, removed, message: removed > 0 ? `Cleared lead for ${phone}` : 'No lead found for that phone' });
 });
 
+// ─── ANALYTICS API ENDPOINTS ────────────────────────────────────────────────
+
+/**
+ * GET /api/analytics/overview
+ * Get overview metrics for the analytics dashboard
+ */
+app.get('/api/analytics/overview', async (req, res) => {
+  try {
+    const { range = '7d' } = req.query;
+    const now = new Date();
+    let startDate;
+
+    switch (range) {
+      case '1d': startDate = new Date(now - 24 * 60 * 60 * 1000); break;
+      case '7d': startDate = new Date(now - 7 * 24 * 60 * 60 * 1000); break;
+      case '30d': startDate = new Date(now - 30 * 24 * 60 * 60 * 1000); break;
+      default: startDate = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    if (!supabase) {
+      return res.json({
+        totalConversations: smsLeads.length,
+        totalLeads: smsLeads.filter(l => l.name).length,
+        totalAppointments: smsLeads.filter(l => l.status === 'booked' || l.status === 'submitted').length,
+        conversionRate: 0,
+        avgResponseTime: 0,
+        channelBreakdown: { sms: smsLeads.filter(l => l.channel === 'SMS').length, web: 0 },
+        statusBreakdown: { new: 0, active: smsLeads.filter(l => l.status === 'active').length, booked: smsLeads.filter(l => l.status === 'booked').length, submitted: smsLeads.filter(l => l.status === 'submitted').length }
+      });
+    }
+
+    const { data: leads } = await supabase
+      .from('ce_leads')
+      .select('*')
+      .gte('created_at', startDate.toISOString());
+
+    const { data: sessions } = await supabase
+      .from('ce_chat_sessions')
+      .select('*')
+      .gte('started_at', startDate.toISOString());
+
+    const { data: appointments } = await supabase
+      .from('ce_appointments')
+      .select('*')
+      .gte('created_at', startDate.toISOString());
+
+    const totalLeads = leads?.length || 0;
+    const totalSessions = sessions?.length || 0;
+    const totalAppointments = appointments?.length || 0;
+
+    const smsLeadsCount = leads?.filter(l => l.source === 'sms').length || 0;
+    const webLeadsCount = leads?.filter(l => l.source === 'web_chat').length || 0;
+
+    const avgResponseTime = sessions?.length > 0
+      ? Math.round(sessions.reduce((sum, s) => sum + (s.avg_response_time_ms || 0), 0) / sessions.length)
+      : 0;
+
+    const conversionRate = totalSessions > 0
+      ? Math.round((totalAppointments / totalSessions) * 100)
+      : 0;
+
+    res.json({
+      totalConversations: totalSessions,
+      totalLeads,
+      totalAppointments,
+      conversionRate,
+      avgResponseTime,
+      channelBreakdown: { sms: smsLeadsCount, web: webLeadsCount },
+      statusBreakdown: {
+        new: leads?.filter(l => l.status === 'new').length || 0,
+        active: leads?.filter(l => l.status === 'active').length || 0,
+        booked: leads?.filter(l => l.status === 'booked').length || 0,
+        submitted: leads?.filter(l => l.status === 'submitted').length || 0
+      }
+    });
+  } catch (error) {
+    console.error('Analytics overview error:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+/**
+ * GET /api/analytics/trends
+ * Get daily conversation and lead trends
+ */
+app.get('/api/analytics/trends', async (req, res) => {
+  try {
+    const { range = '7d' } = req.query;
+    const now = new Date();
+    let days;
+
+    switch (range) {
+      case '1d': days = 1; break;
+      case '7d': days = 7; break;
+      case '30d': days = 30; break;
+      default: days = 7;
+    }
+
+    const startDate = new Date(now - days * 24 * 60 * 60 * 1000);
+    const trends = [];
+
+    for (let i = 0; i < days; i++) {
+      const dayStart = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      trends.push({
+        date: dayStart.toISOString().split('T')[0],
+        conversations: 0,
+        leads: 0,
+        appointments: 0
+      });
+    }
+
+    if (supabase) {
+      const { data: leads } = await supabase
+        .from('ce_leads')
+        .select('created_at')
+        .gte('created_at', startDate.toISOString());
+
+      const { data: sessions } = await supabase
+        .from('ce_chat_sessions')
+        .select('started_at')
+        .gte('started_at', startDate.toISOString());
+
+      const { data: appointments } = await supabase
+        .from('ce_appointments')
+        .select('created_at')
+        .gte('created_at', startDate.toISOString());
+
+      leads?.forEach(lead => {
+        const date = new Date(lead.created_at).toISOString().split('T')[0];
+        const trend = trends.find(t => t.date === date);
+        if (trend) trend.leads++;
+      });
+
+      sessions?.forEach(session => {
+        const date = new Date(session.started_at).toISOString().split('T')[0];
+        const trend = trends.find(t => t.date === date);
+        if (trend) trend.conversations++;
+      });
+
+      appointments?.forEach(appt => {
+        const date = new Date(appt.created_at).toISOString().split('T')[0];
+        const trend = trends.find(t => t.date === date);
+        if (trend) trend.appointments++;
+      });
+    }
+
+    res.json({ trends });
+  } catch (error) {
+    console.error('Analytics trends error:', error);
+    res.status(500).json({ error: 'Failed to fetch trends' });
+  }
+});
+
+/**
+ * GET /api/analytics/hourly
+ * Get hourly distribution of conversations (peak hours)
+ */
+app.get('/api/analytics/hourly', async (req, res) => {
+  try {
+    const hourlyData = Array(24).fill(0).map((_, i) => ({ hour: i, count: 0 }));
+
+    if (supabase) {
+      const { data: sessions } = await supabase
+        .from('ce_chat_sessions')
+        .select('started_at')
+        .gte('started_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+      sessions?.forEach(session => {
+        const hour = new Date(session.started_at).getHours();
+        hourlyData[hour].count++;
+      });
+    }
+
+    res.json({ hourlyData });
+  } catch (error) {
+    console.error('Analytics hourly error:', error);
+    res.status(500).json({ error: 'Failed to fetch hourly data' });
+  }
+});
+
+/**
+ * GET /api/analytics/outcomes
+ * Get conversation outcome breakdown
+ */
+app.get('/api/analytics/outcomes', async (req, res) => {
+  try {
+    const outcomes = {
+      lead_captured: 0,
+      appointment_booked: 0,
+      abandoned: 0,
+      escalated: 0,
+      active: 0
+    };
+
+    if (supabase) {
+      const { data: sessions } = await supabase
+        .from('ce_chat_sessions')
+        .select('outcome')
+        .gte('started_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+      sessions?.forEach(session => {
+        if (outcomes.hasOwnProperty(session.outcome)) {
+          outcomes[session.outcome]++;
+        }
+      });
+    }
+
+    res.json({ outcomes });
+  } catch (error) {
+    console.error('Analytics outcomes error:', error);
+    res.status(500).json({ error: 'Failed to fetch outcomes' });
+  }
+});
+
+/**
+ * GET /api/analytics/vehicle-interest
+ * Get vehicle interest distribution
+ */
+app.get('/api/analytics/vehicle-interest', async (req, res) => {
+  try {
+    const vehicleInterest = {};
+
+    if (supabase) {
+      const { data: leads } = await supabase
+        .from('ce_leads')
+        .select('vehicle_interest')
+        .not('vehicle_interest', 'eq', '')
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+      leads?.forEach(lead => {
+        const vehicle = lead.vehicle_interest || 'Unknown';
+        vehicleInterest[vehicle] = (vehicleInterest[vehicle] || 0) + 1;
+      });
+    }
+
+    const sorted = Object.entries(vehicleInterest)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([vehicle, count]) => ({ vehicle, count }));
+
+    res.json({ vehicleInterest: sorted });
+  } catch (error) {
+    console.error('Analytics vehicle interest error:', error);
+    res.status(500).json({ error: 'Failed to fetch vehicle interest' });
+  }
+});
+
+/**
+ * GET /api/analytics/hot-leads
+ * Get leads with highest interest scores
+ */
+app.get('/api/analytics/hot-leads', async (req, res) => {
+  try {
+    let hotLeads = [];
+
+    if (supabase) {
+      const { data } = await supabase
+        .from('ce_leads')
+        .select('*')
+        .order('interest_score', { ascending: false })
+        .limit(10);
+
+      hotLeads = data || [];
+    } else {
+      hotLeads = [...smsLeads]
+        .sort((a, b) => (b.interestScore || 0) - (a.interestScore || 0))
+        .slice(0, 10)
+        .map(l => ({
+          name: l.name,
+          phone: l.phone,
+          interest_score: l.interestScore,
+          source: l.channel === 'SMS' ? 'sms' : 'web_chat',
+          status: l.status,
+          vehicle_interest: l.vehicleInterest || ''
+        }));
+    }
+
+    res.json({ hotLeads });
+  } catch (error) {
+    console.error('Analytics hot leads error:', error);
+    res.status(500).json({ error: 'Failed to fetch hot leads' });
+  }
+});
+
+/**
+ * POST /api/analytics/session
+ * Create or update a chat session for analytics tracking
+ */
+app.post('/api/analytics/session', async (req, res) => {
+  try {
+    const { sessionId, leadId, source, messageCount, userMessageCount, aiMessageCount, outcome, avgResponseTime } = req.body;
+
+    if (!supabase) {
+      return res.json({ success: true, message: 'Analytics not available without Supabase' });
+    }
+
+    const { data: existing } = await supabase
+      .from('ce_chat_sessions')
+      .select('id')
+      .eq('session_id', sessionId)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('ce_chat_sessions')
+        .update({
+          message_count: messageCount,
+          user_message_count: userMessageCount,
+          ai_message_count: aiMessageCount,
+          outcome: outcome || 'active',
+          avg_response_time_ms: avgResponseTime || 0,
+          ended_at: new Date().toISOString()
+        })
+        .eq('session_id', sessionId);
+    } else {
+      await supabase
+        .from('ce_chat_sessions')
+        .insert({
+          session_id: sessionId,
+          lead_id: leadId || null,
+          source: source || 'web_chat',
+          message_count: messageCount || 0,
+          user_message_count: userMessageCount || 0,
+          ai_message_count: aiMessageCount || 0,
+          outcome: outcome || 'active',
+          avg_response_time_ms: avgResponseTime || 0
+        });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Analytics session error:', error);
+    res.status(500).json({ error: 'Failed to track session' });
+  }
+});
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`🚗 Carson Exports AI Backend running on http://localhost:${PORT}`);
