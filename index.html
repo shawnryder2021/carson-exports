@@ -2243,17 +2243,17 @@ function showToast(msg) {
 
 function copyEmbed() {
   const serverUrl = window.location.origin;
-  const code = `<!-- Carson Exports AI Chat Widget -->
-<script>
-window.DealerAIConfig = {
-  serverUrl: "${serverUrl}",
-  dealerName: "Carson Exports",
-  primaryColor: "#1e6fff",
-  position: "bottom-right",
-  theme: "auto"
-};
-</script>
-<script src="${serverUrl}/chat-widget.js" defer crossorigin="anonymous"></script>`;
+  const code = '<!-- Carson Exports AI Chat Widget -->\n' +
+    '<script>\n' +
+    'window.DealerAIConfig = {\n' +
+    '  serverUrl: "' + serverUrl + '",\n' +
+    '  dealerName: "Carson Exports",\n' +
+    '  primaryColor: "#1e6fff",\n' +
+    '  position: "bottom-right",\n' +
+    '  theme: "auto"\n' +
+    '};\n' +
+    '<' + '/script>\n' +
+    '<script src="' + serverUrl + '/chat-widget.js" defer crossorigin="anonymous"><' + '/script>';
   navigator.clipboard.writeText(code).then(() => showToast('Embed code copied to clipboard!'));
 }
 
@@ -2261,17 +2261,17 @@ function updateEmbedCodeDisplay() {
   const serverUrl = window.location.origin;
   const embedEl = document.getElementById('embedCode');
   if (embedEl) {
-    embedEl.innerHTML = `&lt;!-- Carson Exports AI Chat Widget --&gt;
-&lt;script&gt;
-window.DealerAIConfig = {
-  serverUrl: "${serverUrl}",
-  dealerName: "Carson Exports",
-  primaryColor: "#1e6fff",
-  position: "bottom-right",
-  theme: "auto"
-};
-&lt;/script&gt;
-&lt;script src="${serverUrl}/chat-widget.js" defer crossorigin="anonymous"&gt;&lt;/script&gt;`;
+    embedEl.innerHTML = '&lt;!-- Carson Exports AI Chat Widget --&gt;\n' +
+      '&lt;script&gt;\n' +
+      'window.DealerAIConfig = {\n' +
+      '  serverUrl: "' + serverUrl + '",\n' +
+      '  dealerName: "Carson Exports",\n' +
+      '  primaryColor: "#1e6fff",\n' +
+      '  position: "bottom-right",\n' +
+      '  theme: "auto"\n' +
+      '};\n' +
+      '&lt;/script&gt;\n' +
+      '&lt;script src="' + serverUrl + '/chat-widget.js" defer crossorigin="anonymous"&gt;&lt;/script&gt;';
   }
 }
 
