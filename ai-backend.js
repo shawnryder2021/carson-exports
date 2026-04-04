@@ -1229,7 +1229,8 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
       chatState = 'menu',
       vehicleQuery,
       dealershipSettings = {},
-      pageContext = null
+      pageContext = null,
+      personaId = null
     } = req.body;
 
     // Validate input
@@ -1237,6 +1238,17 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
       return res.status(400).json({
         error: 'Invalid input. Please provide userMessage as a string.'
       });
+    }
+
+    // Load active persona if not specified
+    let activePersona = null;
+    if (supabase) {
+      const personaQuery = personaId
+        ? supabase.from('ce_ai_personas').select('*').eq('id', personaId)
+        : supabase.from('ce_ai_personas').select('*').eq('is_active', true);
+
+      const { data: persona } = await personaQuery.maybeSingle();
+      activePersona = persona;
     }
 
     // Build conversation history (use last 10 messages for context)
@@ -1261,6 +1273,11 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
 
     // Generate dynamic system prompt with dealership settings AND current chat state
     let systemPrompt = generateSystemPrompt(mergedSettings, chatState, recentMessages);
+
+    // Inject persona-specific instructions if available
+    if (activePersona && activePersona.system_prompt_addition) {
+      systemPrompt += `\n\n[PERSONA: ${activePersona.name}]\n${activePersona.system_prompt_addition}`;
+    }
 
     // Inject live inventory context — search for relevant vehicles based on the query
     const query = vehicleQuery || userMessage;
@@ -1336,7 +1353,8 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     res.json({
       response: aiResponse,
       vehicles: vehicleCards,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      persona: activePersona ? { id: activePersona.id, name: activePersona.name } : null
     });
 
   } catch (error) {
@@ -2634,6 +2652,623 @@ app.post('/api/analytics/session', async (req, res) => {
   } catch (error) {
     console.error('Analytics session error:', error);
     res.status(500).json({ error: 'Failed to track session' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI PERSONA MANAGEMENT ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/personas', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { data, error } = await supabase
+      .from('ce_ai_personas')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Personas fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch personas' });
+  }
+});
+
+app.get('/api/personas/active', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { data, error } = await supabase
+      .from('ce_ai_personas')
+      .select('*')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) throw error;
+    res.json(data || {});
+  } catch (error) {
+    console.error('Active persona fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch active persona' });
+  }
+});
+
+app.post('/api/personas', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { name, tone_type, response_style, greeting_template, system_prompt_addition } = req.body;
+
+    if (!name || !tone_type) {
+      return res.status(400).json({ error: 'Name and tone_type are required' });
+    }
+
+    const { data, error } = await supabase
+      .from('ce_ai_personas')
+      .insert({
+        name,
+        tone_type,
+        response_style: response_style || 'professional',
+        greeting_template: greeting_template || '',
+        system_prompt_addition: system_prompt_addition || '',
+        is_active: false
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Persona creation error:', error);
+    res.status(500).json({ error: 'Failed to create persona' });
+  }
+});
+
+app.put('/api/personas/:id', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { id } = req.params;
+    const { name, tone_type, response_style, greeting_template, system_prompt_addition, is_active } = req.body;
+
+    if (is_active) {
+      await supabase.from('ce_ai_personas').update({ is_active: false }).neq('id', id);
+    }
+
+    const { data, error } = await supabase
+      .from('ce_ai_personas')
+      .update({
+        ...(name && { name }),
+        ...(tone_type && { tone_type }),
+        ...(response_style && { response_style }),
+        ...(greeting_template !== undefined && { greeting_template }),
+        ...(system_prompt_addition !== undefined && { system_prompt_addition }),
+        ...(is_active !== undefined && { is_active }),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Persona update error:', error);
+    res.status(500).json({ error: 'Failed to update persona' });
+  }
+});
+
+app.delete('/api/personas/:id', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('ce_ai_personas')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Persona deletion error:', error);
+    res.status(500).json({ error: 'Failed to delete persona' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRAINING DATA MANAGEMENT ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/training-data', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { category, is_approved } = req.query;
+
+    let query = supabase
+      .from('ce_training_data')
+      .select(`
+        id,
+        category,
+        notes,
+        is_approved,
+        created_at,
+        session_id,
+        conversation_id,
+        ce_chat_sessions(id, session_id, message_count, started_at, ended_at),
+        ce_conversations(id, lead_id)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (category) {
+      query = query.eq('category', category);
+    }
+
+    if (is_approved !== undefined) {
+      query = query.eq('is_approved', is_approved === 'true');
+    }
+
+    const { data, error } = await query.limit(100);
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Training data fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch training data' });
+  }
+});
+
+app.post('/api/training-data/flag', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { session_id, category, notes } = req.body;
+
+    if (!session_id || !category) {
+      return res.status(400).json({ error: 'session_id and category are required' });
+    }
+
+    const { data: session, error: sessionError } = await supabase
+      .from('ce_chat_sessions')
+      .select('id, lead_id')
+      .eq('session_id', session_id)
+      .maybeSingle();
+
+    if (sessionError) throw sessionError;
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const { data: conversations, error: convError } = await supabase
+      .from('ce_conversations')
+      .select('id')
+      .eq('lead_id', session.lead_id)
+      .limit(1);
+
+    if (convError) throw convError;
+
+    const { data, error } = await supabase
+      .from('ce_training_data')
+      .insert({
+        session_id: session.id,
+        conversation_id: conversations?.[0]?.id || null,
+        category,
+        notes: notes || '',
+        is_approved: false
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Training data flag error:', error);
+    res.status(500).json({ error: 'Failed to flag training data' });
+  }
+});
+
+app.put('/api/training-data/:id/approve', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('ce_training_data')
+      .update({ is_approved: true })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Training data approval error:', error);
+    res.status(500).json({ error: 'Failed to approve training data' });
+  }
+});
+
+app.delete('/api/training-data/:id', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('ce_training_data')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Training data deletion error:', error);
+    res.status(500).json({ error: 'Failed to delete training data' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONVERSATION ANALYTICS ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/conversations/search', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { query, start_date, end_date, vehicle_interest, limit = '50', offset = '0' } = req.query;
+    const limitNum = Math.min(parseInt(limit) || 50, 500);
+    const offsetNum = parseInt(offset) || 0;
+
+    let dbQuery = supabase
+      .from('ce_chat_sessions')
+      .select(`
+        id,
+        session_id,
+        message_count,
+        user_message_count,
+        ai_message_count,
+        outcome,
+        started_at,
+        ended_at,
+        avg_response_time_ms,
+        ce_leads(id, name, phone, email, vehicle_interest),
+        ce_ai_personas(name, tone_type)
+      `, { count: 'exact' });
+
+    if (query) {
+      dbQuery = dbQuery.or(`ce_leads.name.ilike.%${query}%,ce_leads.phone.ilike.%${query}%,ce_leads.email.ilike.%${query}%`);
+    }
+
+    if (vehicle_interest) {
+      dbQuery = dbQuery.eq('ce_leads.vehicle_interest', vehicle_interest);
+    }
+
+    if (start_date) {
+      dbQuery = dbQuery.gte('started_at', start_date);
+    }
+
+    if (end_date) {
+      dbQuery = dbQuery.lte('started_at', end_date);
+    }
+
+    const { data, error, count } = await dbQuery
+      .order('started_at', { ascending: false })
+      .range(offsetNum, offsetNum + limitNum - 1);
+
+    if (error) throw error;
+
+    res.json({
+      conversations: data,
+      total: count,
+      limit: limitNum,
+      offset: offsetNum
+    });
+  } catch (error) {
+    console.error('Conversation search error:', error);
+    res.status(500).json({ error: 'Failed to search conversations' });
+  }
+});
+
+app.get('/api/conversations/:sessionId', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { sessionId } = req.params;
+
+    const { data: session, error: sessionError } = await supabase
+      .from('ce_chat_sessions')
+      .select(`
+        id,
+        session_id,
+        message_count,
+        started_at,
+        ended_at,
+        outcome,
+        ce_leads(id, name, phone, email, vehicle_interest),
+        ce_ai_personas(name, tone_type)
+      `)
+      .eq('session_id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) throw sessionError;
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const { data: messages, error: messagesError } = await supabase
+      .from('ce_conversations')
+      .select('id, role, content, created_at')
+      .eq('lead_id', session.ce_leads?.id)
+      .order('created_at', { ascending: true });
+
+    if (messagesError) throw messagesError;
+
+    res.json({
+      session,
+      messages
+    });
+  } catch (error) {
+    console.error('Conversation fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEBHOOK DELIVERY ENDPOINTS & RETRY LOGIC
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function sendConversationWebhook(sessionId, webhookUrl) {
+  if (!supabase || !webhookUrl) return;
+
+  try {
+    const { data: session, error: sessionError } = await supabase
+      .from('ce_chat_sessions')
+      .select(`
+        id,
+        session_id,
+        message_count,
+        user_message_count,
+        ai_message_count,
+        started_at,
+        ended_at,
+        outcome,
+        ce_leads(id, name, phone, email, vehicle_interest),
+        ce_ai_personas(name, tone_type)
+      `)
+      .eq('session_id', sessionId)
+      .maybeSingle();
+
+    if (sessionError || !session) {
+      console.error('Error fetching session for webhook:', sessionError);
+      return;
+    }
+
+    const { data: messages, error: messagesError } = await supabase
+      .from('ce_conversations')
+      .select('role, content, created_at')
+      .eq('lead_id', session.ce_leads?.id)
+      .order('created_at', { ascending: true });
+
+    if (messagesError) {
+      console.error('Error fetching messages for webhook:', messagesError);
+      return;
+    }
+
+    const duration = session.ended_at
+      ? new Date(session.ended_at) - new Date(session.started_at)
+      : new Date() - new Date(session.started_at);
+
+    const payload = {
+      event: 'conversation_completed',
+      timestamp: new Date().toISOString(),
+      session: {
+        id: session.session_id,
+        started_at: session.started_at,
+        ended_at: session.ended_at,
+        duration_seconds: Math.floor(duration / 1000),
+        message_count: session.message_count,
+        user_messages: session.user_message_count,
+        ai_messages: session.ai_message_count,
+        outcome: session.outcome
+      },
+      lead: {
+        id: session.ce_leads?.id,
+        name: session.ce_leads?.name || 'Unknown',
+        phone: session.ce_leads?.phone || '',
+        email: session.ce_leads?.email || '',
+        vehicle_interest: session.ce_leads?.vehicle_interest || ''
+      },
+      ai: {
+        persona: session.ce_ai_personas?.name || 'General Assistant',
+        tone_type: session.ce_ai_personas?.tone_type || 'general'
+      },
+      conversation: messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.created_at
+      })),
+      summary: {
+        total_messages: messages.length,
+        first_message: messages[0]?.content?.substring(0, 100) || '',
+        conversation_topics: extractTopics(messages.map(m => m.content).join(' ')),
+        sentiment: analyzeSentiment(messages.map(m => m.content).join(' '))
+      }
+    };
+
+    const response = await axios.post(webhookUrl, payload, {
+      timeout: 10000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    await supabase
+      .from('ce_webhook_logs')
+      .insert({
+        session_id: session.id,
+        webhook_url: webhookUrl,
+        payload: payload,
+        status_code: response.status,
+        retry_count: 0
+      });
+
+    await supabase
+      .from('ce_chat_sessions')
+      .update({ webhook_sent: true })
+      .eq('id', session.id);
+
+    console.log(`✅ Webhook sent successfully for session ${sessionId}`);
+  } catch (error) {
+    console.error(`❌ Webhook delivery failed for session ${sessionId}:`, error.message);
+
+    try {
+      const { data: session } = await supabase
+        .from('ce_chat_sessions')
+        .select('id')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+
+      if (session) {
+        await supabase
+          .from('ce_webhook_logs')
+          .insert({
+            session_id: session.id,
+            webhook_url: webhookUrl,
+            payload: { session_id: sessionId, error: 'pending' },
+            status_code: null,
+            error_message: error.message,
+            retry_count: 0,
+            next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+          });
+      }
+    } catch (logError) {
+      console.error('Error logging webhook failure:', logError);
+    }
+  }
+}
+
+function extractTopics(text) {
+  const topics = [];
+  const keywords = ['vehicle', 'service', 'appointment', 'price', 'financing', 'trade', 'test drive', 'maintenance', 'repair'];
+  keywords.forEach(keyword => {
+    if (text.toLowerCase().includes(keyword)) {
+      topics.push(keyword);
+    }
+  });
+  return topics;
+}
+
+function analyzeSentiment(text) {
+  const positive = ['good', 'great', 'excellent', 'happy', 'satisfied', 'thanks', 'love', 'perfect'];
+  const negative = ['bad', 'terrible', 'poor', 'upset', 'disappointed', 'angry', 'hate', 'problem'];
+  const textLower = text.toLowerCase();
+
+  let positiveCount = positive.filter(w => textLower.includes(w)).length;
+  let negativeCount = negative.filter(w => textLower.includes(w)).length;
+
+  if (positiveCount > negativeCount) return 'positive';
+  if (negativeCount > positiveCount) return 'negative';
+  return 'neutral';
+}
+
+app.get('/api/webhook-logs', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { limit = '50', offset = '0' } = req.query;
+    const limitNum = Math.min(parseInt(limit) || 50, 200);
+    const offsetNum = parseInt(offset) || 0;
+
+    const { data, error, count } = await supabase
+      .from('ce_webhook_logs')
+      .select(`
+        id,
+        webhook_url,
+        status_code,
+        error_message,
+        retry_count,
+        created_at,
+        ce_chat_sessions(session_id, ce_leads(name, phone))
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offsetNum, offsetNum + limitNum - 1);
+
+    if (error) throw error;
+    res.json({ logs: data, total: count });
+  } catch (error) {
+    console.error('Webhook logs fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch webhook logs' });
+  }
+});
+
+app.post('/api/webhook-logs/:id/retry', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  try {
+    const { id } = req.params;
+
+    const { data: log, error: logError } = await supabase
+      .from('ce_webhook_logs')
+      .select('webhook_url, session_id, retry_count')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (logError || !log) {
+      return res.status(404).json({ error: 'Log not found' });
+    }
+
+    if (log.retry_count >= 3) {
+      return res.status(400).json({ error: 'Maximum retry attempts exceeded' });
+    }
+
+    const { data: session } = await supabase
+      .from('ce_chat_sessions')
+      .select('session_id')
+      .eq('id', log.session_id)
+      .maybeSingle();
+
+    await sendConversationWebhook(session.session_id, log.webhook_url);
+
+    await supabase
+      .from('ce_webhook_logs')
+      .update({ retry_count: log.retry_count + 1 })
+      .eq('id', id);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Webhook retry error:', error);
+    res.status(500).json({ error: 'Failed to retry webhook' });
+  }
+});
+
+// Expose webhook sending function for chat completion
+app.post('/api/send-webhook', async (req, res) => {
+  try {
+    const { sessionId, webhookUrl } = req.body;
+
+    if (!sessionId || !webhookUrl) {
+      return res.status(400).json({ error: 'sessionId and webhookUrl are required' });
+    }
+
+    await sendConversationWebhook(sessionId, webhookUrl);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Send webhook error:', error);
+    res.status(500).json({ error: 'Failed to send webhook' });
   }
 });
 

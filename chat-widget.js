@@ -60,6 +60,10 @@
   let selectedVehicle = null;
   let currentSettings = {};
   let proactiveTimer = null;
+  let currentSessionId = null;
+  let currentPersonaId = null;
+  let lastActivityTime = null;
+  let inactivityCheckInterval = null;
 
   // =====================================================
   // 3. FONT AWESOME LOADER
@@ -415,6 +419,7 @@ ${themeBlock}
 
   async function callAI(userMessage, state, vehicleQuery) {
     try {
+      lastActivityTime = Date.now();
       const res = await fetch(CONFIG.serverUrl + '/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -424,11 +429,15 @@ ${themeBlock}
           chatState: state || chatState,
           vehicleQuery: vehicleQuery || userMessage,
           dealershipSettings: currentSettings,
-          pageContext: getPageContext()
+          pageContext: getPageContext(),
+          personaId: currentPersonaId
         })
       });
       if (!res.ok) throw new Error('API error');
       const data = await res.json();
+      if (data.persona) {
+        currentPersonaId = data.persona.id;
+      }
       return {
         response: data.response || "I'd be happy to help! What can I assist you with?",
         vehicles: data.vehicles || []
@@ -439,6 +448,44 @@ ${themeBlock}
         response: "I'd be happy to help! You can ask me about our vehicles, hours, financing, or book an appointment.",
         vehicles: []
       };
+    }
+  }
+
+  async function sendConversationWebhook() {
+    if (!CONFIG.serverUrl || !currentSessionId) return;
+    try {
+      const webhookUrl = currentSettings.webhookUrl;
+      if (!webhookUrl) return;
+
+      await fetch(CONFIG.serverUrl + '/api/send-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: currentSessionId,
+          webhookUrl: webhookUrl
+        })
+      });
+    } catch (e) {
+      console.warn('DealerAI: Webhook send failed:', e.message);
+    }
+  }
+
+  function startInactivityTimer() {
+    if (inactivityCheckInterval) clearInterval(inactivityCheckInterval);
+    lastActivityTime = Date.now();
+    inactivityCheckInterval = setInterval(() => {
+      if (chatOpen && lastActivityTime && Date.now() - lastActivityTime > 10 * 60 * 1000) {
+        sendConversationWebhook();
+        clearInterval(inactivityCheckInterval);
+        inactivityCheckInterval = null;
+      }
+    }, 30000);
+  }
+
+  function stopInactivityTimer() {
+    if (inactivityCheckInterval) {
+      clearInterval(inactivityCheckInterval);
+      inactivityCheckInterval = null;
     }
   }
 
@@ -511,10 +558,15 @@ ${themeBlock}
       win.classList.add('dai-open');
       bubble.style.display = 'none';
       if (chatState === 'idle') startChat();
+      startInactivityTimer();
       document.getElementById('dai-input').focus();
     } else {
       win.classList.remove('dai-open');
       bubble.style.display = 'flex';
+      stopInactivityTimer();
+      if (chatHistory.length > 0) {
+        sendConversationWebhook();
+      }
       // If user closes a proactively-opened chat, mark as dismissed
       if (sessionStorage.getItem(STORAGE + 'proactiveFired')) {
         sessionStorage.setItem(STORAGE + 'proactiveDismissed', '1');
@@ -526,6 +578,8 @@ ${themeBlock}
   function startChat() {
     const pageCtx = getPageContext();
     let greeting = CONFIG.greeting || `Hi! Welcome to <strong>${escapeHtml(CONFIG.dealerName)}</strong>. I'm your AI assistant and I'm here to help.\n\nWhat can I do for you today?`;
+
+    currentSessionId = 'ses_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 
     // If user is on a vehicle page, customize greeting
     if (pageCtx.pageType === 'vehicle-detail' && pageCtx.vehicleInfo) {
