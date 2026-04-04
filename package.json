@@ -5,6 +5,7 @@
   "main": "ai-backend.js",
   "type": "commonjs",
   "scripts": {
+    "build": "node -c ai-backend.js && node -c chat-widget.js && node -c ai-features.js && echo 'Build successful: All scripts validated'",
     "start": "node ai-backend.js",
     "dev": "nodemon ai-backend.js"
   },
