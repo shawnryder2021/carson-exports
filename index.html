@@ -2242,8 +2242,37 @@ function showToast(msg) {
 }
 
 function copyEmbed() {
-  const code = document.getElementById('embedCode').textContent;
+  const serverUrl = window.location.origin;
+  const code = `<!-- Carson Exports AI Chat Widget -->
+<script>
+window.DealerAIConfig = {
+  serverUrl: "${serverUrl}",
+  dealerName: "Carson Exports",
+  primaryColor: "#1e6fff",
+  position: "bottom-right",
+  theme: "auto"
+};
+</script>
+<script src="${serverUrl}/chat-widget.js" defer crossorigin="anonymous"></script>`;
   navigator.clipboard.writeText(code).then(() => showToast('Embed code copied to clipboard!'));
+}
+
+function updateEmbedCodeDisplay() {
+  const serverUrl = window.location.origin;
+  const embedEl = document.getElementById('embedCode');
+  if (embedEl) {
+    embedEl.innerHTML = `&lt;!-- Carson Exports AI Chat Widget --&gt;
+&lt;script&gt;
+window.DealerAIConfig = {
+  serverUrl: "${serverUrl}",
+  dealerName: "Carson Exports",
+  primaryColor: "#1e6fff",
+  position: "bottom-right",
+  theme: "auto"
+};
+&lt;/script&gt;
+&lt;script src="${serverUrl}/chat-widget.js" defer crossorigin="anonymous"&gt;&lt;/script&gt;`;
+  }
 }
 
 // =====================================================
@@ -2781,6 +2810,7 @@ function renderHotLeads(leads) {
   renderWebhookLog();
   updateStats();
   refreshAnalytics();
+  updateEmbedCodeDisplay();
 
   // Show chat notification badge after 3s
   setTimeout(() => {

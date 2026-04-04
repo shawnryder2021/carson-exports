@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>External Website - Chat Widget Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #333; }
+    .header { background: #2c3e50; color: #fff; padding: 1rem 2rem; }
+    .header h1 { font-size: 1.5rem; }
+    .main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .hero { background: #fff; padding: 3rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .hero h2 { font-size: 2rem; margin-bottom: 1rem; }
+    .hero p { color: #666; line-height: 1.6; margin-bottom: 1rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+    .card { background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .card h3 { margin-bottom: 0.5rem; }
+    .card p { color: #666; font-size: 0.9rem; }
+    .btn { display: inline-block; background: #3498db; color: #fff; padding: 0.75rem 1.5rem; border-radius: 4px; text-decoration: none; margin-top: 1rem; cursor: pointer; border: none; font-size: 1rem; }
+    .btn:hover { background: #2980b9; }
+    .note { background: #e8f4f8; border-left: 4px solid #3498db; padding: 1rem; margin: 2rem 0; border-radius: 0 4px 4px 0; }
+    .note h4 { margin-bottom: 0.5rem; color: #2c3e50; }
+    .note code { background: #fff; padding: 0.2rem 0.4rem; border-radius: 3px; font-size: 0.85rem; }
+  </style>
+
+  <!-- EMBED THE CHAT WIDGET HERE -->
+  <script>
+  window.DealerAIConfig = {
+    serverUrl: window.location.origin,
+    dealerName: "Carson Exports",
+    primaryColor: "#1e6fff",
+    position: "bottom-right",
+    theme: "auto"
+  };
+  </script>
+  <script src="chat-widget.js" defer></script>
+</head>
+<body>
+  <header class="header">
+    <h1>Example External Website</h1>
+  </header>
+
+  <main class="main">
+    <section class="hero">
+      <h2>Chat Widget Embed Test</h2>
+      <p>This page simulates an external website with the Carson Exports AI chat widget embedded. The chat bubble should appear in the bottom-right corner.</p>
+      <p>Click the chat bubble to open the AI assistant, or use the button below:</p>
+      <button class="btn" onclick="DealerAI.open()">Open Chat</button>
+      <button class="btn" onclick="DealerAI.sendMessage('Show me SUVs under $30,000')" style="margin-left: 0.5rem; background: #27ae60;">Ask About SUVs</button>
+    </section>
+
+    <div class="note">
+      <h4>How to Embed on Your Website</h4>
+      <p>Add this code to the <code>&lt;head&gt;</code> section of your HTML:</p>
+      <pre style="background:#fff;padding:1rem;margin-top:0.5rem;border-radius:4px;overflow-x:auto;font-size:0.85rem"><code>&lt;script&gt;
+window.DealerAIConfig = {
+  serverUrl: "YOUR_SERVER_URL",
+  dealerName: "Your Dealership Name",
+  primaryColor: "#1e6fff",
+  position: "bottom-right",
+  theme: "auto"
+};
+&lt;/script&gt;
+&lt;script src="YOUR_SERVER_URL/chat-widget.js" defer&gt;&lt;/script&gt;</code></pre>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Self-Contained Widget</h3>
+        <p>The chat widget loads all required assets (fonts, icons, styles) automatically. No additional setup needed.</p>
+      </div>
+      <div class="card">
+        <h3>Session Persistence</h3>
+        <p>Conversations persist across page navigation using sessionStorage, so users don't lose their chat history.</p>
+      </div>
+      <div class="card">
+        <h3>Page-Aware AI</h3>
+        <p>The AI reads page context (title, meta, vehicle info) to provide relevant, contextual responses.</p>
+      </div>
+      <div class="card">
+        <h3>Fully Customizable</h3>
+        <p>Configure colors, position, theme, and dealer name through the DealerAIConfig object.</p>
+      </div>
+      <div class="card">
+        <h3>JavaScript API</h3>
+        <p>Control the widget programmatically: <code>DealerAI.open()</code>, <code>DealerAI.close()</code>, <code>DealerAI.sendMessage()</code></p>
+      </div>
+      <div class="card">
+        <h3>Mobile Responsive</h3>
+        <p>The chat window goes full-screen on mobile devices for the best user experience.</p>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
