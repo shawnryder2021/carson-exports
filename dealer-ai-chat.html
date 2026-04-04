@@ -369,6 +369,7 @@ tr:hover td{background:var(--accent-glow)}
       <div class="admin-sidebar-title">Configuration</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('settings',this)"><i class="fas fa-building"></i> Dealership Settings</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('ai-knowledge',this)"><i class="fas fa-brain"></i> AI Knowledge</div>
+      <div class="admin-sidebar-item" onclick="switchAdminSection('proactive-chat',this)"><i class="fas fa-bolt"></i> Proactive Chat</div>
       <div class="admin-sidebar-title">Modules</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('retention',this)"><i class="fas fa-heart-pulse"></i> Customer Retention</div>
       <div class="admin-sidebar-item" onclick="switchAdminSection('webhook-log',this)"><i class="fas fa-plug"></i> Webhook Log</div>
@@ -607,6 +608,36 @@ Get Trade-In Value</textarea>
         <p class="admin-page-desc">Track all webhook events and CRM data transmissions</p>
         <div class="card">
           <div class="card-body"><div class="table-wrap"><table><thead><tr><th>Timestamp</th><th>Lead</th><th>Endpoint</th><th>Status</th><th>Actions</th></tr></thead><tbody id="webhookLogBody"></tbody></table></div></div>
+        </div>
+      </div>
+
+      <!-- PROACTIVE CHAT -->
+      <div class="admin-section" id="section-proactive-chat">
+        <h1 class="admin-page-title">Proactive Chat Triggers</h1>
+        <p class="admin-page-desc">Automatically engage visitors with contextual chat prompts</p>
+        <div class="card">
+          <div class="card-header">Proactive Chat Settings</div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Enable Proactive Chat</label>
+              <select id="proactiveEnabled">
+                <option value="false">Off — Wait for visitor to open chat</option>
+                <option value="true">On — Auto-open chat after delay</option>
+              </select>
+              <small style="display:block;color:#666;margin-top:4px">When enabled, the chat widget will automatically open after the visitor has been on the page for the configured delay.</small>
+            </div>
+            <div class="form-group">
+              <label>Delay (seconds)</label>
+              <input type="number" id="proactiveDelay" value="15" min="5" max="120" step="1">
+              <small style="display:block;color:#666;margin-top:4px">How many seconds to wait before opening the chat. Recommended: 10-30 seconds.</small>
+            </div>
+            <div class="form-group">
+              <label>Custom Proactive Message (optional)</label>
+              <textarea id="proactiveMessage" rows="3" placeholder="Leave blank to use automatic page-aware greetings (recommended)"></textarea>
+              <small style="display:block;color:#666;margin-top:4px">If set, this message overrides the automatic page-aware greeting. Leave blank to let the widget choose context-specific messages based on the page the visitor is viewing.</small>
+            </div>
+            <button class="btn btn-primary" onclick="saveProactiveSettings()"><i class="fas fa-save"></i> Save Proactive Settings</button>
+          </div>
         </div>
       </div>
 
@@ -1786,6 +1817,10 @@ async function loadSettings() {
     if (s.responseTone)      document.getElementById('aiTone').value = s.responseTone;
     if (s.quickReplies)      document.getElementById('aiQuickReplies').value = s.quickReplies;
     if (s.postReplies)       document.getElementById('aiPostReplies').value = s.postReplies;
+    // Populate Proactive Chat fields
+    if (s.proactiveEnabled !== undefined) document.getElementById('proactiveEnabled').value = s.proactiveEnabled ? 'true' : 'false';
+    if (s.proactiveDelay)    document.getElementById('proactiveDelay').value = s.proactiveDelay;
+    if (s.proactiveMessage !== undefined) document.getElementById('proactiveMessage').value = s.proactiveMessage;
     applySettingsToUI(s);
   } catch (e) {}
 }
@@ -1847,6 +1882,28 @@ async function saveAISettings() {
     }
   } catch (e) {
     showToast('AI settings saved locally (offline mode)');
+  }
+}
+
+async function saveProactiveSettings() {
+  const payload = {
+    proactiveEnabled: document.getElementById('proactiveEnabled').value === 'true',
+    proactiveDelay:   parseInt(document.getElementById('proactiveDelay').value, 10) || 15,
+    proactiveMessage: document.getElementById('proactiveMessage').value
+  };
+  try {
+    const res = await fetch('/api/admin-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      showToast('Proactive chat settings saved to database ✓');
+    } else {
+      showToast('Proactive settings saved locally (DB unavailable)');
+    }
+  } catch (e) {
+    showToast('Proactive settings saved locally (offline mode)');
   }
 }
 

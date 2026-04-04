@@ -59,6 +59,7 @@
   let currentLead = {};
   let selectedVehicle = null;
   let currentSettings = {};
+  let proactiveTimer = null;
 
   // =====================================================
   // 3. FONT AWESOME LOADER
@@ -506,6 +507,7 @@ ${themeBlock}
     const win = document.getElementById('dai-window');
     const bubble = document.getElementById('dai-bubble');
     if (chatOpen) {
+      if (proactiveTimer) { clearTimeout(proactiveTimer); proactiveTimer = null; }
       win.classList.add('dai-open');
       bubble.style.display = 'none';
       if (chatState === 'idle') startChat();
@@ -513,6 +515,10 @@ ${themeBlock}
     } else {
       win.classList.remove('dai-open');
       bubble.style.display = 'flex';
+      // If user closes a proactively-opened chat, mark as dismissed
+      if (sessionStorage.getItem(STORAGE + 'proactiveFired')) {
+        sessionStorage.setItem(STORAGE + 'proactiveDismissed', '1');
+      }
     }
     saveState();
   }
@@ -533,6 +539,11 @@ ${themeBlock}
       greeting = `Hi! Welcome to <strong>${escapeHtml(CONFIG.dealerName)}</strong>. Need to book a service appointment or have questions about maintenance?\n\nI'm here to help!`;
     } else if (pageCtx.pageType === 'trade-in') {
       greeting = `Hi! Welcome to <strong>${escapeHtml(CONFIG.dealerName)}</strong>. I see you're interested in trading in your vehicle.\n\nI can help you get started with a trade-in evaluation!`;
+    }
+
+    // Override with custom proactive message if set and this was a proactive open
+    if (currentSettings.proactiveMessage && currentSettings.proactiveMessage.trim() && sessionStorage.getItem(STORAGE + 'proactiveFired')) {
+      greeting = currentSettings.proactiveMessage.replace(/\{dealerName\}/g, escapeHtml(CONFIG.dealerName));
     }
 
     showTyping(() => {
@@ -937,7 +948,38 @@ ${themeBlock}
   }
 
   // =====================================================
-  // 15. INITIALIZATION
+  // 15. PROACTIVE CHAT TRIGGER
+  // =====================================================
+  function setupProactiveTrigger() {
+    // Guard: only if enabled in settings
+    if (!currentSettings.proactiveEnabled) return;
+    // Guard: don't re-trigger if already fired this session
+    if (sessionStorage.getItem(STORAGE + 'proactiveFired')) return;
+    // Guard: don't trigger if chat is already open or conversation already started
+    if (chatOpen || chatState !== 'idle') return;
+    // Guard: don't trigger if user dismissed proactive this session
+    if (sessionStorage.getItem(STORAGE + 'proactiveDismissed')) return;
+
+    const delay = (parseInt(currentSettings.proactiveDelay, 10) || 15) * 1000;
+    console.log('[DealerAI] Proactive trigger armed — will fire in ' + (delay / 1000) + 's');
+
+    proactiveTimer = setTimeout(() => {
+      // Re-check guards at trigger time
+      if (chatOpen || chatState !== 'idle') return;
+      if (sessionStorage.getItem(STORAGE + 'proactiveFired')) return;
+      if (sessionStorage.getItem(STORAGE + 'proactiveDismissed')) return;
+
+      // Mark as fired so it won't re-trigger on page navigation
+      sessionStorage.setItem(STORAGE + 'proactiveFired', '1');
+      console.log('[DealerAI] Proactive trigger fired — opening chat');
+
+      // Open the chat
+      toggleChat();
+    }, delay);
+  }
+
+  // =====================================================
+  // 16. INITIALIZATION
   // =====================================================
   function init() {
     console.log('[DealerAI] Widget initializing...', { serverUrl: CONFIG.serverUrl, dealerName: CONFIG.dealerName });
@@ -947,6 +989,7 @@ ${themeBlock}
     buildHTML();
     loadSettings().then(() => {
       console.log('[DealerAI] Ready — chat bubble visible');
+      setupProactiveTrigger();
     }).catch(() => {
       console.log('[DealerAI] Ready (settings load skipped) — chat bubble visible');
     });
@@ -966,7 +1009,7 @@ ${themeBlock}
   }
 
   // =====================================================
-  // 16. PUBLIC API
+  // 17. PUBLIC API
   // =====================================================
   window.DealerAI = {
     open: function() { if (!chatOpen) toggleChat(); },

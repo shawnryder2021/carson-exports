@@ -61,7 +61,10 @@ let backendAdminSettings = {
   primaryColor:     '#1e6fff',
   tradeInUrl:       'https://www.carsonexports.com/en/form/exchange-evaluation-new/4',
   quickReplies:     'Book a Service Appointment\nAsk About a Vehicle\nSpeak With Sales\nCheck Inventory\nGet Trade-In Value',
-  postReplies:      'Book a Service Appointment\nAsk About a Vehicle\nCheck Inventory\nGet Trade-In Value'
+  postReplies:      'Book a Service Appointment\nAsk About a Vehicle\nCheck Inventory\nGet Trade-In Value',
+  proactiveEnabled: false,
+  proactiveDelay:   15,
+  proactiveMessage: ''
 };
 
 /**
@@ -1384,7 +1387,7 @@ app.get('/api/admin-settings', (req, res) => {
  * Called automatically when admin saves settings in the dashboard.
  */
 app.post('/api/admin-settings', async (req, res) => {
-  const allowed = ['dealershipName', 'dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'services', 'brands', 'appointmentRules', 'responseTone', 'faqKnowledge', 'crmEmail', 'webhookUrl', 'primaryColor', 'tradeInUrl', 'quickReplies', 'postReplies'];
+  const allowed = ['dealershipName', 'dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'services', 'brands', 'appointmentRules', 'responseTone', 'faqKnowledge', 'crmEmail', 'webhookUrl', 'primaryColor', 'tradeInUrl', 'quickReplies', 'postReplies', 'proactiveEnabled', 'proactiveDelay', 'proactiveMessage'];
   const updated = {};
   allowed.forEach(key => {
     if (req.body[key] !== undefined) {
@@ -1421,7 +1424,10 @@ app.get('/api/settings', async (req, res) => {
     services:         backendAdminSettings.services || '',
     brands:           backendAdminSettings.brands || '',
     appointmentRules: backendAdminSettings.appointmentRules || '',
-    responseTone:     backendAdminSettings.responseTone || 'friendly'
+    responseTone:     backendAdminSettings.responseTone || 'friendly',
+    proactiveEnabled: backendAdminSettings.proactiveEnabled === true || backendAdminSettings.proactiveEnabled === 'true',
+    proactiveDelay:   parseInt(backendAdminSettings.proactiveDelay, 10) || 15,
+    proactiveMessage: backendAdminSettings.proactiveMessage || ''
   });
 });
 
@@ -1430,7 +1436,7 @@ app.get('/api/settings', async (req, res) => {
  * Save dealership settings from the frontend settings form
  */
 app.post('/api/settings', async (req, res) => {
-  const allowed = ['dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'crmEmail', 'webhookUrl', 'primaryColor', 'tradeInUrl', 'quickReplies', 'postReplies'];
+  const allowed = ['dealerName', 'phone', 'address', 'hours', 'afterHoursTime', 'crmEmail', 'webhookUrl', 'primaryColor', 'tradeInUrl', 'quickReplies', 'postReplies', 'proactiveEnabled', 'proactiveDelay', 'proactiveMessage'];
   const updated = {};
   allowed.forEach(key => {
     if (req.body[key] !== undefined) {
