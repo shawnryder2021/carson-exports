@@ -439,7 +439,10 @@ ${themeBlock}
           personaId: currentPersonaId
         })
       });
-      if (!res.ok) throw new Error('API error');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'API error');
+      }
       const data = await res.json();
       if (data.persona) {
         currentPersonaId = data.persona.id;
@@ -449,9 +452,17 @@ ${themeBlock}
         vehicles: data.vehicles || []
       };
     } catch (e) {
-      console.warn('DealerAI: API call failed:', e.message);
+      console.error('DealerAI: API call failed:', e.message);
+      // If it's a configuration error, show it to the user
+      if (e.message.includes('API key') || e.message.includes('Authentication')) {
+        return {
+          response: "⚠️ <strong>Configuration Issue:</strong> " + e.message + "\n\nPlease contact support or check the system configuration.",
+          vehicles: []
+        };
+      }
+      // For network errors, show a helpful message
       return {
-        response: "I'd be happy to help! You can ask me about our vehicles, hours, financing, or book an appointment.",
+        response: "I'm having trouble connecting right now. Please try again in a moment, or contact us directly at " + (currentSettings.phone || "our dealership") + ".",
         vehicles: []
       };
     }
