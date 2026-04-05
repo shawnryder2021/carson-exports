@@ -25,15 +25,19 @@ const path = require('path');
 const fs = require('fs');
 
 // ─── Supabase Client ────────────────────────────────────────────────────────
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+const supabase = (process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY))
+  ? createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+    )
   : null;
 
 if (supabase) {
-  console.log('✅ Supabase connected — leads and settings will be persisted to database');
+  const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Service Role' : 'Anon';
+  console.log(`✅ Supabase connected (${keyType} Key) — leads and settings will be persisted to database`);
 } else {
   console.warn('⚠️  Supabase not configured. Data will be in-memory only (lost on restart).');
-  console.warn('   Set SUPABASE_URL and SUPABASE_ANON_KEY in .env to enable persistence.');
+  console.warn('   Set SUPABASE_URL and either SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY in .env to enable persistence.');
 }
 
 const app = express();
