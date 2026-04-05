@@ -281,9 +281,9 @@ ${themeBlock}
       }
       if (qr) {
         document.getElementById('dai-qr').innerHTML = qr;
-        // Re-bind quick reply click handlers
+        // Re-bind quick reply click handlers with { once: true } to prevent duplicate triggers
         document.querySelectorAll('#dai-qr .dai-qr').forEach(btn => {
-          btn.addEventListener('click', function() { handleQuickReply(this.textContent); });
+          btn.addEventListener('click', function() { handleQuickReply(this.textContent); }, { once: true });
         });
       }
 
@@ -300,13 +300,19 @@ ${themeBlock}
 
   function rebindVehicleHandlers() {
     document.querySelectorAll('#dai-messages [data-dai-vehicle]').forEach(el => {
-      el.addEventListener('click', function(e) {
+      // Remove any existing handler first to prevent duplicates
+      if (el._daiVehicleHandler) {
+        el.removeEventListener('click', el._daiVehicleHandler);
+      }
+      // Create and store new handler
+      el._daiVehicleHandler = function(e) {
         if (e.target.tagName === 'A') return;
         try {
           const v = JSON.parse(this.getAttribute('data-dai-vehicle'));
           selectVehicle(v);
         } catch(err) {}
-      });
+      };
+      el.addEventListener('click', el._daiVehicleHandler);
     });
   }
 
@@ -686,9 +692,9 @@ ${themeBlock}
     container.innerHTML = options.map(opt =>
       `<button class="dai-qr">${escapeHtml(opt)}</button>`
     ).join('');
-    // Bind click handlers
+    // Bind click handlers with { once: true } to prevent duplicate triggers
     container.querySelectorAll('.dai-qr').forEach(btn => {
-      btn.addEventListener('click', function() { handleQuickReply(this.textContent); });
+      btn.addEventListener('click', function() { handleQuickReply(this.textContent); }, { once: true });
     });
     saveState();
   }
@@ -1036,6 +1042,13 @@ ${themeBlock}
   // 16. INITIALIZATION
   // =====================================================
   function init() {
+    // Prevent multiple initializations
+    if (window._dealerAIInitialized) {
+      console.log('[DealerAI] Already initialized, skipping');
+      return;
+    }
+    window._dealerAIInitialized = true;
+
     console.log('[DealerAI] Widget initializing...', { serverUrl: CONFIG.serverUrl, dealerName: CONFIG.dealerName });
     loadFontAwesome();
     loadFont();
