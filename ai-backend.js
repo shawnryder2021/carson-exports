@@ -2770,6 +2770,36 @@ app.delete('/api/personas/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
+    const { data: persona, error: personaError } = await supabase
+      .from('ce_ai_personas')
+      .select('is_active')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (personaError) throw personaError;
+    if (!persona) {
+      return res.status(404).json({ error: 'Persona not found' });
+    }
+
+    if (persona.is_active) {
+      return res.status(400).json({
+        error: 'Cannot delete an active persona. Deactivate it first.'
+      });
+    }
+
+    const { data: activeSessions, error: sessionsError } = await supabase
+      .from('ce_chat_sessions')
+      .select('id', { count: 'exact', head: 1 })
+      .eq('persona_id', id);
+
+    if (sessionsError) throw sessionsError;
+
+    if (activeSessions && activeSessions.length > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete persona with active sessions. Archive or reassign sessions first.'
+      });
+    }
+
     const { error } = await supabase
       .from('ce_ai_personas')
       .delete()
@@ -2804,7 +2834,7 @@ app.get('/api/training-data', async (req, res) => {
         created_at,
         session_id,
         conversation_id,
-        ce_chat_sessions(id, session_id, message_count, started_at, ended_at),
+        ce_chat_sessions(id, session_id, message_count, started_at, ended_at, ce_leads(id, name, phone, email, vehicle_interest)),
         ce_conversations(id, lead_id)
       `)
       .order('created_at', { ascending: false });
@@ -2833,9 +2863,16 @@ app.post('/api/training-data/flag', async (req, res) => {
   }
   try {
     const { session_id, category, notes } = req.body;
+    const validCategories = ['good_answer', 'bad_answer', 'sales_close', 'missed_opportunity'];
 
     if (!session_id || !category) {
       return res.status(400).json({ error: 'session_id and category are required' });
+    }
+
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({
+        error: `Invalid category. Must be one of: ${validCategories.join(', ')}`
+      });
     }
 
     const { data: session, error: sessionError } = await supabase
@@ -2999,7 +3036,7 @@ app.get('/api/conversations/:sessionId', async (req, res) => {
         ended_at,
         outcome,
         ce_leads(id, name, phone, email, vehicle_interest),
-        ce_ai_personas(name, tone_type)
+        ce_ai_personas(id, name, tone_type)
       `)
       .eq('session_id', sessionId)
       .maybeSingle();

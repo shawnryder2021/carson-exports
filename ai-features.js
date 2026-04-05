@@ -118,10 +118,12 @@ async function deletePersona(id) {
     if (res.ok) {
       loadPersonas();
     } else {
-      alert('Failed to delete persona');
+      const errorData = await res.json().catch(() => ({}));
+      alert(errorData.error || 'Failed to delete persona');
     }
   } catch (error) {
     console.error('Error deleting persona:', error);
+    alert('Error deleting persona');
   }
 }
 
@@ -321,8 +323,15 @@ function showConversationModal(data) {
 }
 
 async function flagConversationAsTraining(sessionId) {
-  const category = prompt('Training category (good_answer, bad_answer, sales_close, missed_opportunity):');
+  const validCategories = ['good_answer', 'bad_answer', 'sales_close', 'missed_opportunity'];
+  const categoryList = validCategories.join(', ');
+  const category = prompt(`Training category:\n${categoryList}`);
   if (!category) return;
+
+  if (!validCategories.includes(category)) {
+    alert(`Invalid category. Must be one of: ${categoryList}`);
+    return;
+  }
 
   const notes = prompt('Why is this good/bad training data?', '');
 
@@ -341,10 +350,12 @@ async function flagConversationAsTraining(sessionId) {
       alert('Conversation flagged for training');
       document.querySelectorAll('[style*="inset:0"]').forEach(el => el.remove());
     } else {
-      alert('Failed to flag conversation');
+      const errorData = await res.json().catch(() => ({}));
+      alert(errorData.error || 'Failed to flag conversation');
     }
   } catch (error) {
     console.error('Error flagging conversation:', error);
+    alert('Error flagging conversation');
   }
 }
 
