@@ -622,10 +622,11 @@ ${themeBlock}
       chatState = 'menu';
       currentLead = { source: 'Chat Widget', submittedAt: new Date().toISOString() };
       showQuickReplies(getMenuReplies());
+      saveState();
     });
   }
 
-  function sendUserMessage() {
+  async function sendUserMessage() {
     const input = document.getElementById('dai-input');
     const text = input.value.trim();
     if (!text) return;
@@ -633,14 +634,14 @@ ${themeBlock}
     chatHistory.push({ role: 'user', content: text });
     addUserMessage(text);
     clearQuickReplies();
-    processMessage(text);
+    await processMessage(text);
   }
 
-  function handleQuickReply(text) {
+  async function handleQuickReply(text) {
     chatHistory.push({ role: 'user', content: text });
     addUserMessage(text);
     clearQuickReplies();
-    processMessage(text);
+    await processMessage(text);
   }
 
   function linkifyUrls(text) {
@@ -683,7 +684,7 @@ ${themeBlock}
     saveState();
   }
 
-  function showTyping(callback) {
+  async function showTyping(callback) {
     const msgs = document.getElementById('dai-messages');
     const div = document.createElement('div');
     div.className = 'dai-msg dai-bot';
@@ -691,11 +692,14 @@ ${themeBlock}
     div.innerHTML = '<div class="dai-msg-bubble"><div class="dai-typing"><div class="dai-typing-dot"></div><div class="dai-typing-dot"></div><div class="dai-typing-dot"></div></div></div>';
     msgs.appendChild(div);
     scrollMessages();
-    setTimeout(() => {
-      const el = document.getElementById('dai-typing');
-      if (el) el.remove();
-      callback();
-    }, 800 + Math.random() * 600);
+    await new Promise(resolve => {
+      setTimeout(() => {
+        const el = document.getElementById('dai-typing');
+        if (el) el.remove();
+        resolve();
+      }, 800 + Math.random() * 600);
+    });
+    await callback();
   }
 
   function showQuickReplies(options) {
@@ -789,7 +793,7 @@ ${themeBlock}
   // =====================================================
   // 13. MESSAGE PROCESSING (STATE MACHINE)
   // =====================================================
-  function processMessage(text) {
+  async function processMessage(text) {
     // Handle appointment confirmation
     if (chatState === 'appt_confirm' && window._daiConfirmHandler) {
       window._daiConfirmHandler(text);
@@ -800,73 +804,73 @@ ${themeBlock}
 
     switch (chatState) {
       case 'menu':
-        processMenuChoice(lower, text);
+        await processMenuChoice(lower, text);
         break;
       case 'inventory_search':
-        processInventorySearch(text);
+        await processInventorySearch(text);
         break;
       case 'vehicle_interest':
-        processVehicleInterest(lower, text);
+        await processVehicleInterest(lower, text);
         break;
       case 'appt_name':
         currentLead.name = text;
-        showTyping(() => { addBotMessage("Thanks, " + escapeHtml(text.split(' ')[0]) + "! What's the best <strong>phone number</strong> to reach you?"); chatState = 'appt_phone'; saveState(); });
+        await showTyping(() => { addBotMessage("Thanks, " + escapeHtml(text.split(' ')[0]) + "! What's the best <strong>phone number</strong> to reach you?"); chatState = 'appt_phone'; saveState(); });
         break;
       case 'appt_phone':
         currentLead.phone = text;
-        showTyping(() => { addBotMessage("Got it. And your <strong>email address</strong>?"); chatState = 'appt_email'; saveState(); });
+        await showTyping(() => { addBotMessage("Got it. And your <strong>email address</strong>?"); chatState = 'appt_email'; saveState(); });
         break;
       case 'appt_email':
         currentLead.email = text;
         if (!currentLead.department) {
-          showTyping(() => { addBotMessage("Is this for <strong>Service</strong> or <strong>Sales</strong>?"); chatState = 'appt_dept'; showQuickReplies(['Service', 'Sales']); saveState(); });
+          await showTyping(() => { addBotMessage("Is this for <strong>Service</strong> or <strong>Sales</strong>?"); chatState = 'appt_dept'; showQuickReplies(['Service', 'Sales']); saveState(); });
         } else {
-          showTyping(() => { addBotMessage("What <strong>date</strong> works best for your appointment?"); chatState = 'appt_date'; suggestDates(); saveState(); });
+          await showTyping(() => { addBotMessage("What <strong>date</strong> works best for your appointment?"); chatState = 'appt_date'; suggestDates(); saveState(); });
         }
         break;
       case 'appt_dept':
         currentLead.department = lower.includes('service') ? 'Service' : 'Sales';
-        showTyping(() => { addBotMessage("Perfect. What <strong>date</strong> works best for you?"); chatState = 'appt_date'; suggestDates(); saveState(); });
+        await showTyping(() => { addBotMessage("Perfect. What <strong>date</strong> works best for you?"); chatState = 'appt_date'; suggestDates(); saveState(); });
         break;
       case 'appt_date':
         currentLead.date = text;
-        showTyping(() => { addBotMessage("And what <strong>time</strong> would you prefer?"); chatState = 'appt_time'; showQuickReplies(['9:00 AM', '10:00 AM', '11:00 AM', '1:00 PM', '2:00 PM', '3:00 PM']); saveState(); });
+        await showTyping(() => { addBotMessage("And what <strong>time</strong> would you prefer?"); chatState = 'appt_time'; showQuickReplies(['9:00 AM', '10:00 AM', '11:00 AM', '1:00 PM', '2:00 PM', '3:00 PM']); saveState(); });
         break;
       case 'appt_time':
         currentLead.time = text;
-        showTyping(() => { showAppointmentConfirmation(); });
+        await showTyping(() => { showAppointmentConfirmation(); });
         break;
       case 'complete':
-        showTyping(() => { addBotMessage("Is there anything else I can help you with?"); chatState = 'menu'; showQuickReplies(getPostReplies()); saveState(); });
+        await showTyping(() => { addBotMessage("Is there anything else I can help you with?"); chatState = 'menu'; showQuickReplies(getPostReplies()); saveState(); });
         break;
       default:
-        showTyping(() => { handleFreeText(text); });
+        await showTyping(async () => { await handleFreeText(text); });
     }
   }
 
-  function processMenuChoice(choice, originalText) {
+  async function processMenuChoice(choice, originalText) {
     if (choice.includes('service') || choice.includes('book')) {
       currentLead = { source: 'Chat Widget', department: 'Service', submittedAt: new Date().toISOString() };
-      showTyping(() => {
+      await showTyping(() => {
         addBotMessage("I'd be happy to help you book a service appointment! Let's get your details.\n\nWhat's your <strong>full name</strong>?");
         chatState = 'appt_name';
         saveState();
       });
     } else if (choice.includes('vehicle') || choice.includes('ask')) {
-      showTyping(() => {
+      await showTyping(() => {
         addBotMessage("I'd love to help you find the right vehicle!\n\nWhat are you looking for? You can tell me a:\n- <strong>Make/model</strong> (e.g., Toyota RAV4)\n- <strong>Type</strong> (SUV, sedan, truck)\n- <strong>Budget</strong> (e.g., under $30K)\n- Or just describe what you need!");
         chatState = 'inventory_search';
         saveState();
       });
     } else if (choice.includes('sales') || choice.includes('speak')) {
       currentLead = { source: 'Chat Widget', department: 'Sales', submittedAt: new Date().toISOString() };
-      showTyping(() => {
+      await showTyping(() => {
         addBotMessage("I'll connect you with our sales team! First, let me grab your info.\n\nWhat's your <strong>full name</strong>?");
         chatState = 'appt_name';
         saveState();
       });
     } else if (choice.includes('inventory') || choice.includes('check')) {
-      showTyping(async () => {
+      await showTyping(async () => {
         const ai = await callAI('Show me your full inventory overview', 'inventory_search');
         chatState = 'inventory_search';
         if (ai.vehicles.length > 0) {
@@ -879,18 +883,18 @@ ${themeBlock}
       });
     } else if (choice.includes('trade')) {
       const tradeUrl = currentSettings.tradeInUrl || 'https://www.carsonexports.com/en/form/exchange-evaluation-new/4';
-      showTyping(() => {
+      await showTyping(() => {
         addBotMessage(`Great! We'd love to help you get a value for your trade-in.\n\nYou can submit your vehicle details for a free evaluation using our online form:\n\n<a href="${tradeUrl}" target="_blank" rel="noopener">Submit Trade-In Evaluation</a>\n\nOur team will review your submission and get back to you with a fair market value.\n\nHave questions about the process? Just ask!`);
         showQuickReplies(['Browse Inventory', 'Book a Test Drive', 'Ask Another Question', 'Back to Menu']);
         saveState();
       });
     } else {
-      handleFreeText(originalText || choice);
+      await handleFreeText(originalText || choice);
     }
   }
 
-  function processInventorySearch(text) {
-    showTyping(async () => {
+  async function processInventorySearch(text) {
+    await showTyping(async () => {
       const ai = await callAI(text, 'inventory_search');
       if (ai.vehicles.length > 0) {
         showAIResponseWithCards(ai, ai.vehicles.length === 1
@@ -905,11 +909,11 @@ ${themeBlock}
     });
   }
 
-  function processVehicleInterest(lower, text) {
+  async function processVehicleInterest(lower, text) {
     if (lower.includes('test drive') || lower.includes('book')) {
       currentLead = { source: 'Chat Widget', department: 'Sales', submittedAt: new Date().toISOString() };
       if (selectedVehicle) currentLead.vehicleInterest = selectedVehicle.title;
-      showTyping(() => {
+      await showTyping(() => {
         addBotMessage("Excellent! Let's get you booked for a test drive" + (selectedVehicle ? " of the <strong>" + escapeHtml(selectedVehicle.title) + "</strong>" : "") + ".\n\nWhat's your <strong>full name</strong>?");
         chatState = 'appt_name';
         saveState();
@@ -917,11 +921,11 @@ ${themeBlock}
     } else if (lower.includes('similar') || lower.includes('more')) {
       chatState = 'inventory_search';
       if (selectedVehicle) {
-        processInventorySearch(selectedVehicle.bodyStyle || selectedVehicle.make);
+        await processInventorySearch(selectedVehicle.bodyStyle || selectedVehicle.make);
       }
     } else if (lower.includes('detail') || lower.includes('more info')) {
       if (selectedVehicle) {
-        showTyping(async () => {
+        await showTyping(async () => {
           const vehicleContext = `Tell me more details about the ${selectedVehicle.title} priced at $${Number(selectedVehicle.price).toLocaleString()} CAD`;
           const ai = await callAI(vehicleContext, 'vehicle_interest', text);
           addBotMessage(ai.response);
@@ -931,13 +935,13 @@ ${themeBlock}
       }
     } else if (lower.includes('menu') || lower.includes('back')) {
       chatState = 'menu';
-      showTyping(() => {
+      await showTyping(() => {
         addBotMessage("No problem! What else can I help you with?");
         showQuickReplies(getMenuReplies());
         saveState();
       });
     } else if (/\b(link|url|listing|send.*(it|me|link)|where.*(find|see|view)|share)\b/i.test(lower) && selectedVehicle && selectedVehicle.link) {
-      showTyping(() => {
+      await showTyping(() => {
         addBotMessage(`Here's the link to the <strong>${escapeHtml(selectedVehicle.title)}</strong>:\n\n<a href="${escapeHtml(selectedVehicle.link)}" target="_blank" rel="noopener">${escapeHtml(selectedVehicle.link)}</a>`);
         showQuickReplies(['Book a Test Drive', 'Ask About Financing', 'See Similar Vehicles', 'Back to Menu']);
         saveState();
@@ -947,7 +951,7 @@ ${themeBlock}
       const isNonVehicleTopic = /\b(financ|loan|payment|apr|interest rate|credit|lease|trade.?in|warranty|service|hour|price match|insur|registr)\b/i.test(lower);
       const isVehicleQuery = !isNonVehicleTopic && /\b(cars?|vehicles?|suvs?|sedans?|trucks?|vans?|autos?|inventory|stock|available)\b/i.test(lower);
 
-      showTyping(async () => {
+      await showTyping(async () => {
         const vehicleContext = selectedVehicle
           ? `The customer is looking at a ${selectedVehicle.title} priced at $${Number(selectedVehicle.price).toLocaleString()} CAD. `
           : '';
@@ -964,12 +968,12 @@ ${themeBlock}
     }
   }
 
-  function handleFreeText(text) {
+  async function handleFreeText(text) {
     const lower = text.toLowerCase();
     const isNonVehicleTopic = /\b(financ|loan|payment|apr|interest rate|credit|lease|trade.?in|warranty|service|hour|price match|insur|registr)\b/i.test(lower);
     const isVehicleQuery = !isNonVehicleTopic && /\b(cars?|vehicles?|suvs?|sedans?|trucks?|vans?|autos?|toyotas?|fords?|hondas?|nissans?|hyundais?|audis?|bmws?|kias?|mazdas?|chevrolets?|rams?|volkswagens?|inventory|stock|available|civic|altima|rav4|camry|corolla|tucson|tiguan|kicks|qashqai|elantra|explorer)\b/i.test(lower);
 
-    showTyping(async () => {
+    await showTyping(async () => {
       const state = chatState === 'idle' ? 'menu' : chatState;
       const ai = await callAI(text, state);
       if (isVehicleQuery && ai.vehicles.length > 0) {

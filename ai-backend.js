@@ -1333,7 +1333,7 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
 
     // Call OpenAI API
     const response = await axios.post(OPENAI_API_URL, {
-      model: 'gpt-5.4-nano', // Fast and efficient model
+      model: 'gpt-5-nano', // Better conversation model
       messages: [
         { role: 'system', content: systemPrompt },
         ...conversationMessages
