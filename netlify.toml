@@ -1,0 +1,23 @@
+[build]
+  command = "npm run build"
+  publish = "."
+  functions = "netlify/functions"
+
+[context.production.environment]
+  NODE_VERSION = "18"
+
+[[redirects]]
+  from = "/index.html"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://your-backend-host/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*.html"
+  to = "/index.html"
+  status = 404
