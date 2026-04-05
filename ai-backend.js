@@ -2837,9 +2837,7 @@ app.get('/api/training-data', async (req, res) => {
         is_approved,
         created_at,
         session_id,
-        conversation_id,
-        ce_chat_sessions(id, session_id, message_count, started_at, ended_at, ce_leads(id, name, phone, email, vehicle_interest)),
-        ce_conversations(id, lead_id)
+        conversation_id
       `)
       .order('created_at', { ascending: false });
 

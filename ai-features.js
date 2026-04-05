@@ -155,28 +155,24 @@ function renderTrainingData(data) {
     return;
   }
 
-  list.innerHTML = data.map(item => {
-    const session = item.ce_chat_sessions?.[0];
-    const lead = session?.ce_leads;
-    return `
-      <div style="background:var(--card-alt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem">
-        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.5rem">
-          <div>
-            <div style="font-weight:600">${lead?.name || 'Unknown'}</div>
-            <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:1rem;margin-top:.25rem">
-              <span>${lead?.phone || 'No phone'}</span>
-              <span style="color:${item.category === 'good_answer' ? 'var(--success)' : item.category === 'bad_answer' ? 'var(--danger)' : 'var(--accent)'}"><i class="fas fa-tag"></i> ${item.category}</span>
-            </div>
-          </div>
-          <div style="display:flex;gap:.5rem">
-            ${!item.is_approved ? `<button class="btn btn-sm btn-success" onclick="approveTrainingData('${item.id}')"><i class="fas fa-check"></i> Approve</button>` : '<span style="color:var(--success);font-size:.8rem"><i class="fas fa-check-circle"></i> Approved</span>'}
-            <button class="btn btn-sm btn-danger" onclick="deleteTrainingData('${item.id}')"><i class="fas fa-trash"></i></button>
+  list.innerHTML = data.map(item => `
+    <div style="background:var(--card-alt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.5rem">
+        <div>
+          <div style="font-weight:600">Session ${item.session_id?.slice(0, 8)}</div>
+          <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:1rem;margin-top:.25rem">
+            <span><i class="fas fa-calendar"></i> ${new Date(item.created_at).toLocaleDateString()}</span>
+            <span style="color:${item.category === 'good_answer' ? 'var(--success)' : item.category === 'bad_answer' ? 'var(--danger)' : 'var(--accent)'}"><i class="fas fa-tag"></i> ${item.category}</span>
           </div>
         </div>
-        ${item.notes ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.5rem;padding:.5rem;background:var(--bg);border-radius:var(--radius-sm)">${escapeHtml(item.notes)}</div>` : ''}
+        <div style="display:flex;gap:.5rem">
+          ${!item.is_approved ? `<button class="btn btn-sm btn-success" onclick="approveTrainingData('${item.id}')"><i class="fas fa-check"></i> Approve</button>` : '<span style="color:var(--success);font-size:.8rem"><i class="fas fa-check-circle"></i> Approved</span>'}
+          <button class="btn btn-sm btn-danger" onclick="deleteTrainingData('${item.id}')"><i class="fas fa-trash"></i></button>
+        </div>
       </div>
-    `;
-  }).join('');
+      ${item.notes ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:.5rem;padding:.5rem;background:var(--bg);border-radius:var(--radius-sm)">${escapeHtml(item.notes)}</div>` : ''}
+    </div>
+  `).join('');
 }
 
 async function approveTrainingData(id) {
