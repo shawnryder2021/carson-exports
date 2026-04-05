@@ -3,10 +3,15 @@ const SERVER_URL = window.location.origin || 'http://localhost:3001';
 async function loadPersonas() {
   try {
     const res = await fetch(`${SERVER_URL}/api/personas`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const personas = await res.json();
     renderPersonas(personas);
   } catch (error) {
     console.error('Failed to load personas:', error);
+    const list = document.getElementById('personas-list');
+    const loading = document.getElementById('personas-loading');
+    if (loading) loading.style.display = 'none';
+    if (list) list.innerHTML = `<div style="text-align:center;color:var(--error);padding:2rem"><i class="fas fa-exclamation-circle"></i> Failed to load personas. ${error.message}</div>`;
   }
 }
 
@@ -132,10 +137,13 @@ async function loadTrainingData() {
     const category = document.getElementById('training-filter').value;
     const url = `${SERVER_URL}/api/training-data${category ? `?category=${category}` : ''}`;
     const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     renderTrainingData(data);
   } catch (error) {
     console.error('Failed to load training data:', error);
+    const list = document.getElementById('training-data-list');
+    if (list) list.innerHTML = `<div style="text-align:center;color:var(--error);padding:2rem"><i class="fas fa-exclamation-circle"></i> Failed to load training data. ${error.message}</div>`;
   }
 }
 

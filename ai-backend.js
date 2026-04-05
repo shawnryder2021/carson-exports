@@ -2676,8 +2676,8 @@ app.get('/api/personas', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
-    console.error('Personas fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch personas' });
+    console.error('Personas fetch error:', error.message || error);
+    res.status(500).json({ error: 'Failed to fetch personas', details: error.message });
   }
 });
 
