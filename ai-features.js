@@ -1,4 +1,6 @@
-const SERVER_URL = window.location.origin || 'http://localhost:3001';
+const SERVER_URL = (window.location.protocol === 'file:' || window.location.hostname === '' || window.location.hostname === 'localhost' || window.location.hostname.startsWith('127.'))
+  ? 'http://localhost:3001'
+  : window.location.origin;
 
 async function loadPersonas() {
   try {
