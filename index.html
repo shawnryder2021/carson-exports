@@ -856,7 +856,7 @@ Get Trade-In Value</textarea>
             <div class="code-block" id="embedCode">&lt;!-- Carson Exports AI Chat Widget --&gt;
 &lt;script&gt;
 window.DealerAIConfig = {
-  serverUrl: "https://carsons.shawnryder.com",
+  serverUrl: "http://localhost:3000",
   dealerName: "Carson Exports",
   primaryColor: "#1e6fff",
   position: "bottom-right",
@@ -2928,5 +2928,16 @@ function renderHotLeads(leads) {
 })();
 </script>
 <script src="ai-features.js"></script>
+<!-- Carson Exports AI Chat Widget -->
+<script>
+window.DealerAIConfig = {
+  serverUrl: "http://localhost:3000",
+  dealerName: "Carson Exports",
+  primaryColor: "#1e6fff",
+  position: "bottom-right",
+  theme: "auto"
+};
+</script>
+<script src="chat-widget.js" defer crossorigin="anonymous"></script>
 </body>
 </html>

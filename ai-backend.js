@@ -958,6 +958,7 @@ function searchInventory(query, limit = 4) {
 
   const stopWords = new Set(['the','is','at','in','on','to','for','of','and','or','do','you','have','any','what','how','can','with','this','that','are','was','be','an','it','we','my','me','your','about','would','like','want','some','get','got','see','show','tell','anything','something','does','did']);
   const terms = query.toLowerCase().replace(/[?!.,;:'"]/g, '').split(/[\s,]+/).filter(t => t.length > 1 && !stopWords.has(t));
+  console.log('  → Search terms after stopword removal:', terms);
 
   // Helper: check if two strings share a root (handles plurals, partial matches)
   // "nissans" matches "nissan", "suvs" matches "suv", "toyota" matches "toyotas"
@@ -1009,6 +1010,7 @@ function searchInventory(query, limit = 4) {
   // This prevents "show me a RAV4" from also returning Corollas, Camrys, etc.
   const modelMatches = sorted.filter(s => s.hasModelMatch);
   if (modelMatches.length > 0) {
+    console.log('  → Returning model matches:', modelMatches.length);
     return modelMatches.slice(0, limit).map(s => s.vehicle);
   }
 
@@ -1018,9 +1020,11 @@ function searchInventory(query, limit = 4) {
     // If also has a make term, further filter by make
     const makeMatches = bodyMatches.filter(s => s.hasMakeMatch);
     if (makeMatches.length > 0) {
+      console.log('  → Returning body+make matches:', makeMatches.length);
       return makeMatches.slice(0, limit).map(s => s.vehicle);
     }
     if (bodyMatches.length > 0) {
+      console.log('  → Returning body matches:', bodyMatches.length);
       return bodyMatches.slice(0, limit).map(s => s.vehicle);
     }
   }
@@ -1028,10 +1032,12 @@ function searchInventory(query, limit = 4) {
   // If any results match by make, prefer those over general fuzzy matches
   const makeMatches = sorted.filter(s => s.hasMakeMatch);
   if (makeMatches.length > 0) {
+    console.log('  → Returning make matches:', makeMatches.length);
     return makeMatches.slice(0, limit).map(s => s.vehicle);
   }
 
   // Otherwise fall back to all scored results
+  console.log('  → Returning general scored results:', sorted.length);
   return sorted.slice(0, limit).map(s => s.vehicle);
 }
 
@@ -1249,6 +1255,13 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
       personaId = null
     } = req.body;
 
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📥 Chat request received:');
+    console.log('  User Message:', userMessage);
+    console.log('  Chat State:', chatState);
+    console.log('  Vehicle Query:', vehicleQuery);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     // Validate input
     if (!userMessage || typeof userMessage !== 'string') {
       return res.status(400).json({
@@ -1297,7 +1310,9 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
 
     // Inject live inventory context — search for relevant vehicles based on the query
     const query = vehicleQuery || userMessage;
+    console.log('🔍 Searching inventory with query:', query);
     const relevantVehicles = searchInventory(query, 5);
+    console.log(`✓ Found ${relevantVehicles.length} vehicles:`, relevantVehicles.map(v => `${v.year} ${v.make} ${v.model}`).join(', '));
     if (inventory.length > 0) {
       const makes = [...new Set(inventory.map(v => v.make))].join(', ');
       const prices = inventory.map(v => v.price).filter(p => p > 0);
