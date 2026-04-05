@@ -25,16 +25,28 @@ const path = require('path');
 const fs = require('fs');
 
 // ─── Supabase Client ────────────────────────────────────────────────────────
-const supabase = (process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY))
-  ? createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-    )
+const getValidSupabaseKey = () => {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (serviceKey && !serviceKey.includes('your_') && !serviceKey.includes('placeholder') && serviceKey.startsWith('ey')) {
+    return { key: serviceKey, type: 'Service Role' };
+  }
+
+  if (anonKey && !anonKey.includes('your_') && !anonKey.includes('placeholder') && anonKey.startsWith('ey')) {
+    return { key: anonKey, type: 'Anon' };
+  }
+
+  return null;
+};
+
+const keyConfig = getValidSupabaseKey();
+const supabase = (process.env.SUPABASE_URL && keyConfig)
+  ? createClient(process.env.SUPABASE_URL, keyConfig.key)
   : null;
 
 if (supabase) {
-  const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Service Role' : 'Anon';
-  console.log(`✅ Supabase connected (${keyType} Key) — leads and settings will be persisted to database`);
+  console.log(`✅ Supabase connected (${keyConfig.type} Key) — leads and settings will be persisted to database`);
 } else {
   console.warn('⚠️  Supabase not configured. Data will be in-memory only (lost on restart).');
   console.warn('   Set SUPABASE_URL and either SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY in .env to enable persistence.');
