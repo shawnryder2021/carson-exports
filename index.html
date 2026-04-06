@@ -332,31 +332,6 @@ tr:hover td{background:var(--accent-glow)}
   </footer>
 
   <!-- Chat Bubble -->
-  <div class="chat-bubble" id="chatBubble" onclick="toggleChat()">
-    <i class="fas fa-comments"></i>
-    <div class="badge" id="chatBadge" style="display:none">1</div>
-  </div>
-
-  <!-- Chat Window -->
-  <div class="chat-window" id="chatWindow">
-    <div class="chat-header">
-      <div class="chat-header-info">
-        <div class="chat-avatar"><i class="fas fa-robot"></i></div>
-        <div class="chat-header-text">
-          <h4>Dealer AI Assistant</h4>
-          <span id="chatOnlineStatus">Online — Ready to help</span>
-        </div>
-      </div>
-      <button class="chat-close" onclick="toggleChat()"><i class="fas fa-times"></i></button>
-    </div>
-    <div class="chat-status-bar open-status" id="chatStatusBar"><i class="fas fa-circle" style="font-size:.4rem;vertical-align:middle"></i> We're open! Chat with us now</div>
-    <div class="chat-messages" id="chatMessages"></div>
-    <div class="chat-quick-replies" id="chatQuickReplies"></div>
-    <div class="chat-input-area">
-      <input class="chat-input" id="chatInput" placeholder="Type your message..." onkeydown="if(event.key==='Enter')sendUserMessage()">
-      <button class="chat-send" onclick="sendUserMessage()"><i class="fas fa-paper-plane"></i></button>
-    </div>
-  </div>
 </div>
 
 <!-- ========== ADMIN VIEW ========== -->
@@ -1359,6 +1334,8 @@ function scrollToInventory() { document.getElementById('inventorySection').scrol
 // =====================================================
 // CHAT ENGINE
 // =====================================================
+// Old chat functions disabled - using chat-widget.js instead
+/*
 function toggleChat() {
   chatOpen = !chatOpen;
   const win = document.getElementById('chatWindow');
@@ -1374,6 +1351,7 @@ function toggleChat() {
     bubble.style.display = 'flex';
   }
 }
+*/
 
 function openChatWithContext(context) {
   if (!chatOpen) toggleChat();
@@ -1407,6 +1385,7 @@ function checkAfterHours() {
   return hour >= trigger || hour < 8;
 }
 
+/*
 function startChat() {
   chatSessionCount++;
   updateStats();
@@ -1423,7 +1402,9 @@ function startChat() {
     showQuickReplies(getMenuReplies());
   });
 }
+*/
 
+/*
 function sendUserMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
@@ -1434,6 +1415,7 @@ function sendUserMessage() {
   clearQuickReplies();
   processMessage(text);
 }
+*/
 
 function handleQuickReply(text) {
   chatHistory.push({ role: 'user', content: text });
@@ -1960,6 +1942,8 @@ function linkifyUrls(text) {
   });
 }
 
+// Old chat message functions disabled - using chat-widget.js instead
+/*
 function addBotMessage(html) {
   // Track plain-text version in conversation history for AI context
   const plainText = html.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').trim();
@@ -2017,6 +2001,7 @@ function showQuickReplies(options) {
 function clearQuickReplies() {
   document.getElementById('chatQuickReplies').innerHTML = '';
 }
+*/
 
 function suggestDates() {
   const dates = [];
@@ -2057,6 +2042,7 @@ function escapeHtml(str) {
 // =====================================================
 // DEMO MODE
 // =====================================================
+/*
 function toggleAfterHoursMode() {
   // Reset chat for mode change
   document.getElementById('chatMessages').innerHTML = '';
@@ -2070,6 +2056,7 @@ function toggleAfterHoursMode() {
     document.getElementById('chatBadge').style.display = 'flex';
   }
 }
+*/
 
 // =====================================================
 // LEADS & STATS
